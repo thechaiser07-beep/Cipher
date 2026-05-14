@@ -8,6 +8,7 @@ let txns = [];
 let currentUser = null;
 let currentType = 'income';
 let catChartInstance = null;
+let destChartInstance = null;
 let activeCurrency = localStorage.getItem('ba-currency') || 'JPY';
 let authMode = 'signin';
 let budgets = {};
@@ -27,6 +28,8 @@ const CURRENCIES = [
   { code: 'KRW', symbol: '₩',  name: 'KRW' },
   { code: 'CNY', symbol: '¥',  name: 'CNY' },
 ];
+
+const DEST_COLORS = ['#9d4edd','#4cc9f0','#06d6a0','#f72585','#ffbe0b','#ff6b6b','#06b6d4','#8b5cf6','#f97316','#14b8a6'];
 
 const CAT_COLORS = {
   Food: '#06d6a0', Transport: '#4cc9f0', Housing: '#9d4edd',
@@ -239,7 +242,10 @@ function openSubModal(id) {
   document.getElementById('s-name').value = s ? s.name : '';
   document.getElementById('s-amount').value = s ? s.amount : '';
   document.getElementById('s-amount-label').textContent = 'Amount (' + getCur().symbol + ')';
-  document.getElementById('s-cat').value = s ? s.category : 'Entertainment';
+  const sCats = Object.keys(budgets).sort();
+  if (!sCats.includes('Other')) sCats.push('Other');
+  document.getElementById('s-cat').innerHTML = sCats.map(c => `<option value="${c}">${c}</option>`).join('');
+  document.getElementById('s-cat').value = s ? s.category : (sCats[0] || 'Other');
   document.getElementById('s-freq').value = s ? s.frequency : 'monthly';
   document.getElementById('s-day').value = s ? s.day_of_month : 1;
   document.getElementById('s-month').value = s ? (s.month_of_year || 1) : (new Date().getMonth() + 1);
@@ -371,7 +377,7 @@ function navigateTo(page) {
   document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
   document.querySelectorAll(`[data-page="${page}"]`).forEach(x => x.classList.add('active'));
   document.getElementById('page-' + page).classList.add('active');
-  if (page === 'dashboard') renderChart();
+  if (page === 'dashboard') { renderChart(); renderDestChart(); }
 }
 
 document.querySelectorAll('.nav-item, .bottom-nav-btn').forEach(el => {
@@ -468,6 +474,7 @@ function render() {
   renderTxnList('all-txns', curTxns, true);
   renderBudgets(thisMonth);
   renderChart(thisMonth);
+  renderDestChart(thisMonth);
   renderSubscriptions();
 }
 
@@ -545,6 +552,44 @@ function renderChart(thisMonth) {
   if (!labels.length) { canvas.parentElement.style.display = 'none'; legend.innerHTML = ''; return; }
   canvas.parentElement.style.display = 'block';
   catChartInstance = new Chart(canvas, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.label + ': ' + fmt(ctx.raw) } } },
+    },
+  });
+  legend.innerHTML = labels.map((l, i) =>
+    `<span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)">
+      <span style="width:10px;height:10px;border-radius:2px;background:${colors[i]};flex-shrink:0"></span>
+      ${l} ${fmt(data[i])}
+    </span>`
+  ).join('');
+}
+
+function renderDestChart(thisMonth) {
+  if (!thisMonth) {
+    const now = new Date();
+    thisMonth = txns.filter(t => {
+      const d = new Date(t.date + 'T00:00:00');
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && t.currency === activeCurrency;
+    });
+  }
+  const spent = {};
+  thisMonth.filter(t => t.type === 'expense' && t.destination).forEach(t => {
+    spent[t.destination] = (spent[t.destination] || 0) + t.amount;
+  });
+  const labels = Object.keys(spent);
+  const data   = Object.values(spent);
+  const colors = labels.map((_, i) => DEST_COLORS[i % DEST_COLORS.length]);
+  const card   = document.getElementById('dest-chart-card');
+  const canvas = document.getElementById('destChart');
+  if (destChartInstance) { destChartInstance.destroy(); destChartInstance = null; }
+  const legend = document.getElementById('dest-chart-legend');
+  if (!labels.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  canvas.parentElement.style.display = 'block';
+  destChartInstance = new Chart(canvas, {
     type: 'doughnut',
     data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
     options: {
