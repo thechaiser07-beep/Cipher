@@ -394,6 +394,7 @@ document.getElementById('openModal').addEventListener('click', openModal);
 function openModal() {
   document.getElementById('amount-label').textContent = 'Amount (' + getCur().symbol + ')';
   document.getElementById('f-dest-wrap').style.display = currentType === 'expense' ? 'block' : 'none';
+  setType(currentType);
   document.getElementById('modal').style.display = 'flex';
 }
 function closeModal() {
@@ -406,9 +407,13 @@ function setType(t) {
   document.getElementById('typeInc').className = 'type-btn' + (t === 'income' ? ' active-inc' : '');
   document.getElementById('typeExp').className = 'type-btn' + (t === 'expense' ? ' active-exp' : '');
   document.getElementById('f-dest-wrap').style.display = t === 'expense' ? 'block' : 'none';
-  document.getElementById('f-cat').innerHTML = t === 'income'
-    ? '<option value="Salary">Salary</option><option value="Freelance">Freelance</option><option value="Other">Other</option>'
-    : '<option value="Food">Food</option><option value="Transport">Transport</option><option value="Housing">Housing</option><option value="Entertainment">Entertainment</option><option value="Health">Health</option><option value="Shopping">Shopping</option><option value="Other">Other</option>';
+  if (t === 'income') {
+    document.getElementById('f-cat').innerHTML = '<option value="Salary">Salary</option><option value="Freelance">Freelance</option><option value="Other">Other</option>';
+  } else {
+    const cats = Object.keys(budgets).sort();
+    if (!cats.includes('Other')) cats.push('Other');
+    document.getElementById('f-cat').innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+  }
 }
 
 // ── BUDGET MODAL ───────────────────────────────────────────────────────────
