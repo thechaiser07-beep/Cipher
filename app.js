@@ -300,10 +300,10 @@ async function deleteSubscription() {
 
 // ── SUPABASE CRUD ──────────────────────────────────────────────────────────
 function toDb(t) {
-  return { description: t.desc, amount: t.amount, cat: t.cat, type: t.type, date: t.date, currency: t.currency, user_id: currentUser.id };
+  return { description: t.desc, amount: t.amount, cat: t.cat, type: t.type, date: t.date, currency: t.currency, user_id: currentUser.id, destination: t.destination || null };
 }
 function fromDb(row) {
-  return { id: row.id, desc: row.description, amount: Number(row.amount), cat: row.cat, type: row.type, date: row.date, currency: row.currency };
+  return { id: row.id, desc: row.description, amount: Number(row.amount), cat: row.cat, type: row.type, date: row.date, currency: row.currency, destination: row.destination || null };
 }
 
 async function loadTransactions() {
@@ -312,17 +312,18 @@ async function loadTransactions() {
 }
 
 async function saveTransaction() {
-  const desc   = document.getElementById('f-desc').value.trim();
-  const amount = parseFloat(document.getElementById('f-amount').value);
-  const cat    = document.getElementById('f-cat').value;
-  const date   = document.getElementById('f-date').value;
+  const desc        = document.getElementById('f-desc').value.trim();
+  const destination = document.getElementById('f-dest').value.trim();
+  const amount      = parseFloat(document.getElementById('f-amount').value);
+  const cat         = document.getElementById('f-cat').value;
+  const date        = document.getElementById('f-date').value;
   if (!desc || !amount || !date) return;
 
   const btn = document.getElementById('save-btn');
   btn.disabled = true; btn.textContent = '…';
 
   const { data, error } = await db.from('transactions')
-    .insert(toDb({ desc, amount, cat, date, type: currentType, currency: activeCurrency }))
+    .insert(toDb({ desc, amount, cat, date, type: currentType, currency: activeCurrency, destination }))
     .select().single();
 
   btn.disabled = false; btn.textContent = 'Save';
@@ -330,6 +331,7 @@ async function saveTransaction() {
   if (error) { alert('Save failed: ' + error.message); return; }
   txns.unshift(fromDb(data));
   document.getElementById('f-desc').value = '';
+  document.getElementById('f-dest').value = '';
   document.getElementById('f-amount').value = '';
   closeModal();
   render();
@@ -468,7 +470,7 @@ function txnHTML(t, showDelete) {
     : '';
   return `<div class="txn-row">
     <div class="txn-icon" style="background:${color}22"><i class="ti ${icon}" style="color:${color};font-size:14px" aria-hidden="true"></i></div>
-    <div class="txn-info"><div class="txn-name">${t.desc}</div><div class="txn-cat">${t.cat}</div></div>
+    <div class="txn-info"><div class="txn-name">${t.desc}</div><div class="txn-cat">${t.cat}${t.destination ? ' · ' + t.destination : ''}</div></div>
     <div class="txn-amount ${t.type === 'income' ? 'pos' : 'neg'}">${t.type === 'income' ? '+' : '-'}${fmt(t.amount)}</div>
     <div class="txn-date">${t.date.slice(5)}</div>
     ${del}
