@@ -1,0 +1,17 @@
+{
+  "name": "Cipher",
+  "short_name": "Cipher",
+  "description": "Personal budget tracker",
+  "start_url": "./budget_app_mvp_v2.html",
+  "display": "standalone",
+  "background_color": "#07071a",
+  "theme_color": "#9d4edd",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
