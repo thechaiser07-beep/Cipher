@@ -1,4 +1,4 @@
-const CACHE = 'budgetapp-v1';
+const CACHE = 'budgetapp-v2';
 
 const PRECACHE = [
   './index.html',
