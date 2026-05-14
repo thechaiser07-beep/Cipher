@@ -1,7 +1,7 @@
 const CACHE = 'budgetapp-v1';
 
 const PRECACHE = [
-  './budget_app_mvp_v2.html',
+  './index.html',
   './manifest.json',
   './icon.svg',
   'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
