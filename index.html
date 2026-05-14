@@ -112,6 +112,11 @@
         <div class="page" id="page-subscriptions">
           <div class="page-title">Subscriptions</div>
           <button class="add-btn" onclick="openSubModal()"><i class="ti ti-plus" aria-hidden="true"></i> Add subscription</button>
+          <div class="metrics" id="sub-metrics" style="display:none">
+            <div class="metric"><div class="metric-label">Monthly</div><div class="metric-value expense" id="sub-m-monthly">0</div></div>
+            <div class="metric"><div class="metric-label">Yearly</div><div class="metric-value expense" id="sub-m-yearly">0</div></div>
+            <div class="metric"><div class="metric-label">Active</div><div class="metric-value" id="sub-m-count">0</div></div>
+          </div>
           <div class="card"><div id="sub-list"><div class="empty">No subscriptions yet.</div></div></div>
         </div>
 

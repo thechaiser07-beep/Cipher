@@ -191,17 +191,44 @@ async function checkDueSubscriptions() {
 function renderSubscriptions() {
   const el = document.getElementById('sub-list');
   const curSubs = subs.filter(s => s.currency === activeCurrency);
+
+  const metricsEl = document.getElementById('sub-metrics');
+  if (curSubs.length) {
+    const todayStr = today();
+    const monthlyCost = curSubs.reduce((sum, s) => {
+      return sum + (s.frequency === 'monthly' ? s.amount : s.amount / 12);
+    }, 0);
+    const yearlyCost = curSubs.reduce((sum, s) => {
+      return sum + (s.frequency === 'yearly' ? s.amount : s.amount * 12);
+    }, 0);
+    document.getElementById('sub-m-monthly').textContent = fmt(monthlyCost);
+    document.getElementById('sub-m-yearly').textContent = fmt(yearlyCost);
+    document.getElementById('sub-m-count').textContent = curSubs.length;
+    metricsEl.style.display = 'grid';
+  } else {
+    metricsEl.style.display = 'none';
+  }
+
   if (!curSubs.length) { el.innerHTML = '<div class="empty">No subscriptions yet. Add one!</div>'; return; }
+
+  const todayStr = today();
+  const in7 = new Date(); in7.setDate(in7.getDate() + 7);
+  const in7Str = in7.toISOString().slice(0, 10);
+
   el.innerHTML = curSubs.map(s => {
     const color = CAT_COLORS[s.category] || '#888780';
     const freqText = s.frequency === 'monthly'
       ? `Monthly · ${ordinal(s.day_of_month)}`
       : `Yearly · ${MONTH_NAMES[s.month_of_year - 1].slice(0, 3)} ${ordinal(s.day_of_month)}`;
     const nextDue = s.next_due.slice(5).replace('-', '/');
+    const dueSoon = s.next_due <= in7Str;
+    const badge = dueSoon
+      ? `<span class="badge badge-warn" style="font-size:10px">Due ${s.next_due === todayStr ? 'today' : 'soon'}</span>`
+      : '';
     return `<div class="sub-card">
       <div class="sub-icon" style="background:${color}22"><i class="ti ti-repeat" style="color:${color};font-size:15px" aria-hidden="true"></i></div>
       <div class="sub-info">
-        <div class="sub-name">${s.name}</div>
+        <div class="sub-name">${s.name} ${badge}</div>
         <div class="sub-meta">${freqText}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
