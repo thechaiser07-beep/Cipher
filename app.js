@@ -582,12 +582,14 @@ function renderDestChart(thisMonth) {
   const labels = Object.keys(spent);
   const data   = Object.values(spent);
   const colors = labels.map((_, i) => DEST_COLORS[i % DEST_COLORS.length]);
-  const card   = document.getElementById('dest-chart-card');
   const canvas = document.getElementById('destChart');
   if (destChartInstance) { destChartInstance.destroy(); destChartInstance = null; }
   const legend = document.getElementById('dest-chart-legend');
-  if (!labels.length) { card.style.display = 'none'; return; }
-  card.style.display = 'block';
+  if (!labels.length) {
+    canvas.parentElement.style.display = 'none';
+    legend.innerHTML = '<div class="empty" style="padding:1.5rem 0">No destination data yet.</div>';
+    return;
+  }
   canvas.parentElement.style.display = 'block';
   destChartInstance = new Chart(canvas, {
     type: 'doughnut',
