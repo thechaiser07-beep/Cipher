@@ -83,15 +83,17 @@
             <div class="metric"><div class="metric-label">Income</div><div class="metric-value income" id="m-income">0</div></div>
             <div class="metric"><div class="metric-label">Expenses</div><div class="metric-value expense" id="m-expense">0</div></div>
           </div>
-          <div class="card">
-            <div class="section-title">Spending by category</div>
-            <div class="chart-wrap"><canvas id="catChart" role="img" aria-label="Spending by category"></canvas></div>
-            <div id="chart-legend" style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:8px;font-size:12px"></div>
-          </div>
-          <div class="card" id="dest-chart-card" style="display:none">
-            <div class="section-title">Spending by destination</div>
-            <div class="chart-wrap"><canvas id="destChart" role="img" aria-label="Spending by destination"></canvas></div>
-            <div id="dest-chart-legend" style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:8px;font-size:12px"></div>
+          <div class="charts-row">
+            <div class="card" style="flex:1;min-width:0">
+              <div class="section-title">Spending by category</div>
+              <div class="chart-wrap"><canvas id="catChart" role="img" aria-label="Spending by category"></canvas></div>
+              <div id="chart-legend" style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:8px;font-size:12px"></div>
+            </div>
+            <div class="card" id="dest-chart-card" style="flex:1;min-width:0;display:none">
+              <div class="section-title">Spending by destination</div>
+              <div class="chart-wrap"><canvas id="destChart" role="img" aria-label="Spending by destination"></canvas></div>
+              <div id="dest-chart-legend" style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:8px;font-size:12px"></div>
+            </div>
           </div>
           <div class="card">
             <div class="section-title">Recent transactions</div>
