@@ -34,28 +34,19 @@ const CAT_COLORS = {
   Salary: '#06d6a0', Freelance: '#4cc9f0', Other: '#6666aa',
 };
 
-const BUDGETS_BASE_USD = { Food: 400, Transport: 150, Housing: 800, Entertainment: 200, Health: 100, Shopping: 250 };
-const CURRENCY_MUL     = { USD: 1, GBP: 0.8, EUR: 0.93, JPY: 150, AUD: 1.55, CAD: 1.37, CHF: 0.9, INR: 83, KRW: 1330, CNY: 7.2 };
-const MONTH_NAMES      = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-// ── BUDGETS (localStorage) ─────────────────────────────────────────────────
-function budgetKey() { return 'ba-budgets-' + activeCurrency; }
-
-function loadBudgets() {
-  const stored = localStorage.getItem(budgetKey());
-  if (stored) return JSON.parse(stored);
-  const mul = CURRENCY_MUL[activeCurrency] || 1;
-  const defaults = {};
-  Object.entries(BUDGETS_BASE_USD).forEach(([cat, base]) => { defaults[cat] = Math.round(base * mul); });
-  return defaults;
+// ── BUDGETS (Supabase) ─────────────────────────────────────────────────────
+async function loadBudgets() {
+  const { data } = await db.from('budgets').select('*').eq('user_id', currentUser.id).eq('currency', activeCurrency);
+  budgets = {};
+  if (data) data.forEach(row => { budgets[row.category] = Number(row.amount); });
 }
-
-function persistBudgets() { localStorage.setItem(budgetKey(), JSON.stringify(budgets)); }
 
 // ── AUTH ───────────────────────────────────────────────────────────────────
 async function init() {
   const { data: { session } } = await db.auth.getSession();
-  if (session) { currentUser = session.user; await loadTransactions(); await loadSubscriptions(); await checkDueSubscriptions(); showApp(); }
+  if (session) { currentUser = session.user; await loadTransactions(); await loadSubscriptions(); await checkDueSubscriptions(); await showApp(); }
   else { showAuthScreen(); }
 
   db.auth.onAuthStateChange(async (event, session) => {
@@ -64,7 +55,7 @@ async function init() {
       await loadTransactions();
       await loadSubscriptions();
       await checkDueSubscriptions();
-      showApp();
+      await showApp();
     } else if (event === 'SIGNED_OUT') {
       currentUser = null; txns = []; subs = []; showAuthScreen();
     }
@@ -76,13 +67,13 @@ function showAuthScreen() {
   document.getElementById('auth-screen').style.display = 'flex';
 }
 
-function showApp() {
+async function showApp() {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app-wrap').style.display = 'flex';
   const now = new Date();
   document.getElementById('dash-title').textContent = `Overview — ${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
-  budgets = loadBudgets();
   buildCurrencySelects();
+  await loadBudgets();
   render();
 }
 
@@ -362,7 +353,7 @@ function buildCurrencySelects() {
   });
 }
 
-function setCurrency(code) {
+async function setCurrency(code) {
   activeCurrency = code;
   localStorage.setItem('ba-currency', code);
   ['cur-select', 'cur-select-mob'].forEach(id => {
@@ -370,7 +361,7 @@ function setCurrency(code) {
     if (el) el.value = code;
   });
   document.getElementById('amount-label').textContent = 'Amount (' + getCur().symbol + ')';
-  budgets = loadBudgets();
+  await loadBudgets();
   render();
 }
 
@@ -430,20 +421,28 @@ function openBudgetModal(cat) {
 }
 function closeBudgetModal() { document.getElementById('budget-modal').style.display = 'none'; }
 
-function saveBudget() {
+async function saveBudget() {
   const cat   = editingBudgetCat || document.getElementById('b-cat').value.trim();
   const limit = parseFloat(document.getElementById('b-amount').value);
   if (!cat || !limit) return;
+  const { error } = await db.from('budgets')
+    .upsert({ user_id: currentUser.id, category: cat, amount: limit, currency: activeCurrency },
+            { onConflict: 'user_id,category,currency' });
+  if (error) { alert('Save failed: ' + error.message); return; }
   budgets[cat] = limit;
-  persistBudgets();
   closeBudgetModal();
   render();
 }
 
-function deleteBudget() {
+async function deleteBudget() {
   if (!editingBudgetCat) return;
+  const { error } = await db.from('budgets')
+    .delete()
+    .eq('user_id', currentUser.id)
+    .eq('category', editingBudgetCat)
+    .eq('currency', activeCurrency);
+  if (error) { alert('Delete failed: ' + error.message); return; }
   delete budgets[editingBudgetCat];
-  persistBudgets();
   closeBudgetModal();
   render();
 }
