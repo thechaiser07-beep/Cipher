@@ -9,6 +9,7 @@ let currentUser = null;
 let currentType = 'income';
 let catChartInstance = null;
 let destChartInstance = null;
+let budgetChartInstance = null;
 let activeCurrency = localStorage.getItem('ba-currency') || 'JPY';
 let authMode = 'signin';
 let budgets = {};
@@ -473,6 +474,7 @@ function render() {
   renderTxnList('dash-txns', curTxns.slice(0, 5), false);
   renderTxnList('all-txns', curTxns, true);
   renderBudgets(thisMonth);
+  renderBudgetChart();
   renderChart(thisMonth);
   renderDestChart(thisMonth);
   renderSubscriptions();
@@ -504,6 +506,30 @@ function renderBudgets(thisMonth) {
   const spent = {};
   thisMonth.filter(t => t.type === 'expense').forEach(t => { spent[t.cat] = (spent[t.cat] || 0) + t.amount; });
   const entries = Object.entries(budgets);
+
+  const totalLimit = entries.reduce((s, [, v]) => s + v, 0);
+  const totalSpent = entries.reduce((s, [cat]) => s + (spent[cat] || 0), 0);
+  const remaining  = totalLimit - totalSpent;
+  const hasBudgets = entries.length > 0;
+
+  document.getElementById('budget-totals').style.display     = hasBudgets ? 'grid' : 'none';
+  document.getElementById('budget-chart-card').style.display = hasBudgets ? 'block' : 'none';
+
+  if (hasBudgets) {
+    document.getElementById('bm-limit').textContent = fmt(totalLimit);
+    document.getElementById('bm-spent').textContent = fmt(totalSpent);
+    const remEl = document.getElementById('bm-remaining');
+    remEl.textContent = (remaining < 0 ? '-' : '') + fmt(Math.abs(remaining));
+    remEl.style.color = remaining < 0 ? '#f72585' : '#06d6a0';
+    document.getElementById('bm-remaining-label').textContent = remaining < 0 ? 'Over budget' : 'Remaining';
+
+    const sel  = document.getElementById('budget-cat-select');
+    const prev = sel.value;
+    sel.innerHTML = '<option value="all">All categories</option>' +
+      Object.keys(budgets).sort().map(c => `<option value="${c}">${c}</option>`).join('');
+    if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  }
+
   if (!entries.length) {
     document.getElementById('budget-list').innerHTML = '<div class="empty">No budgets yet. Add one!</div>';
     return;
@@ -605,6 +631,80 @@ function renderDestChart(thisMonth) {
       ${l} ${fmt(data[i])}
     </span>`
   ).join('');
+}
+
+function renderBudgetChart() {
+  const now          = new Date();
+  const year         = now.getFullYear();
+  const month        = now.getMonth();
+  const daysInMonth  = new Date(year, month + 1, 0).getDate();
+  const todayDay     = now.getDate();
+  const sel          = document.getElementById('budget-cat-select');
+  const selectedCat  = sel ? sel.value : 'all';
+
+  const monthTxns = txns.filter(t => {
+    const d = new Date(t.date + 'T00:00:00');
+    return d.getMonth() === month && d.getFullYear() === year &&
+           t.currency === activeCurrency && t.type === 'expense';
+  });
+  const filtered = selectedCat === 'all' ? monthTxns : monthTxns.filter(t => t.cat === selectedCat);
+
+  const dailySpend = new Array(daysInMonth).fill(0);
+  filtered.forEach(t => { dailySpend[new Date(t.date + 'T00:00:00').getDate() - 1] += t.amount; });
+
+  let running = 0;
+  const cumulativeData = dailySpend.map((v, i) => {
+    if (i >= todayDay) return null;
+    running += v;
+    return running;
+  });
+
+  const limit = selectedCat === 'all'
+    ? Object.values(budgets).reduce((s, v) => s + v, 0)
+    : (budgets[selectedCat] || 0);
+
+  const labels     = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const budgetLine = new Array(daysInMonth).fill(limit);
+
+  const canvas = document.getElementById('budgetChart');
+  if (budgetChartInstance) { budgetChartInstance.destroy(); budgetChartInstance = null; }
+
+  budgetChartInstance = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Spending',
+          data: cumulativeData,
+          borderColor: '#9d4edd',
+          backgroundColor: 'rgba(157,78,221,0.12)',
+          fill: true, tension: 0.3,
+          pointRadius: 2, pointHoverRadius: 4,
+          borderWidth: 2, spanGaps: false,
+        },
+        {
+          label: 'Budget limit',
+          data: budgetLine,
+          borderColor: '#f72585',
+          borderDash: [5, 5],
+          borderWidth: 1.5,
+          pointRadius: 0, fill: false, tension: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt(ctx.raw ?? 0) } },
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6666aa', font: { size: 11 }, maxTicksLimit: 8 } },
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6666aa', font: { size: 11 }, callback: v => fmt(v) } },
+      },
+    },
+  });
 }
 
 // ── BOOT ───────────────────────────────────────────────────────────────────

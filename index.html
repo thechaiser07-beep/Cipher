@@ -112,6 +112,22 @@
         <div class="page" id="page-budgets">
           <div class="page-title">Monthly budgets</div>
           <button class="add-btn" onclick="openBudgetModal()"><i class="ti ti-plus" aria-hidden="true"></i> Add budget</button>
+          <div class="metrics" id="budget-totals" style="display:none">
+            <div class="metric"><div class="metric-label">Total budget</div><div class="metric-value" id="bm-limit">0</div></div>
+            <div class="metric"><div class="metric-label">Spent</div><div class="metric-value expense" id="bm-spent">0</div></div>
+            <div class="metric"><div class="metric-label" id="bm-remaining-label">Remaining</div><div class="metric-value" id="bm-remaining">0</div></div>
+          </div>
+          <div class="card" id="budget-chart-card" style="display:none">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <div class="section-title" style="margin:0">Spending trend</div>
+              <select id="budget-cat-select" class="cur-select-sm" onchange="renderBudgetChart()"></select>
+            </div>
+            <div class="chart-wrap"><canvas id="budgetChart" role="img" aria-label="Budget spending trend"></canvas></div>
+            <div style="display:flex;gap:14px;margin-top:8px;font-size:12px">
+              <span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)"><span style="width:10px;height:3px;background:#9d4edd;border-radius:2px;display:inline-block"></span>Spending</span>
+              <span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)"><span style="width:10px;height:3px;background:#f72585;border-radius:2px;display:inline-block;border-top:2px dashed #f72585;height:0"></span>Budget limit</span>
+            </div>
+          </div>
           <div id="budget-list"></div>
         </div>
 
