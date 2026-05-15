@@ -16,8 +16,7 @@ let budgets = {};
 let editingBudgetCat = null;
 let subs = [];
 let editingSubId = null;
-let accounts = [];
-let editingAccountId = null;
+let detailChartInstance = null;
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'USD' },
@@ -52,7 +51,7 @@ async function loadBudgets() {
 // ── AUTH ───────────────────────────────────────────────────────────────────
 async function init() {
   const { data: { session } } = await db.auth.getSession();
-  if (session) { currentUser = session.user; await loadTransactions(); await loadSubscriptions(); await loadAccounts(); await checkDueSubscriptions(); await showApp(); }
+  if (session) { currentUser = session.user; await loadTransactions(); await loadSubscriptions(); await checkDueSubscriptions(); await showApp(); }
   else { showAuthScreen(); }
 
   db.auth.onAuthStateChange(async (event, session) => {
@@ -60,11 +59,10 @@ async function init() {
       currentUser = session.user;
       await loadTransactions();
       await loadSubscriptions();
-      await loadAccounts();
       await checkDueSubscriptions();
       await showApp();
     } else if (event === 'SIGNED_OUT') {
-      currentUser = null; txns = []; subs = []; accounts = []; showAuthScreen();
+      currentUser = null; txns = []; subs = []; showAuthScreen();
     }
   });
 }
@@ -161,91 +159,72 @@ function ordinal(n) {
   return n + (s[(v-20)%10] || s[v] || s[0]);
 }
 
-// ── ACCOUNTS ──────────────────────────────────────────────────────────────
-const ACCOUNT_ICONS = {
-  'Checking': 'ti-building-bank', 'Savings': 'ti-piggy-bank',
-  'Credit Card': 'ti-credit-card', 'Cash': 'ti-cash', 'Investment': 'ti-chart-line',
-};
-const ACCOUNT_COLORS = {
-  'Checking': '#4cc9f0', 'Savings': '#06d6a0',
-  'Credit Card': '#f72585', 'Cash': '#ffbe0b', 'Investment': '#9d4edd',
-};
+// ── BUDGET DETAIL ─────────────────────────────────────────────────────────
+function openBudgetDetail(cat) {
+  const now         = new Date();
+  const year        = now.getFullYear();
+  const month       = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayDay    = now.getDate();
+  const daysLeft    = daysInMonth - todayDay + 1;
 
-async function loadAccounts() {
-  const { data } = await db.from('accounts').select('*').eq('user_id', currentUser.id).order('created_at');
-  if (data) accounts = data;
+  const monthTxns = txns.filter(t => {
+    const d = new Date(t.date + 'T00:00:00');
+    return d.getMonth() === month && d.getFullYear() === year &&
+           t.currency === activeCurrency && t.type === 'expense' && t.cat === cat;
+  });
+
+  const spent     = monthTxns.reduce((s, t) => s + t.amount, 0);
+  const limit     = budgets[cat] || 0;
+  const remaining = limit - spent;
+  const daily     = daysLeft > 0 ? remaining / daysLeft : 0;
+
+  document.getElementById('detail-cat-name').textContent = cat;
+  document.getElementById('detail-spent').textContent    = fmt(spent);
+
+  const remEl = document.getElementById('detail-remaining');
+  remEl.textContent = (remaining < 0 ? '-' : '') + fmt(Math.abs(remaining));
+  remEl.style.color = remaining < 0 ? '#f72585' : '#06d6a0';
+  document.getElementById('detail-remaining-label').textContent = remaining < 0 ? 'Over budget' : 'Remaining';
+
+  const dailyEl = document.getElementById('detail-daily');
+  dailyEl.textContent = fmt(Math.max(0, daily));
+  dailyEl.style.color = daily <= 0 ? '#f72585' : '#06d6a0';
+
+  const dailySpend = new Array(daysInMonth).fill(0);
+  monthTxns.forEach(t => { dailySpend[new Date(t.date + 'T00:00:00').getDate() - 1] += t.amount; });
+  let running = 0;
+  const cumulativeData = dailySpend.map((v, i) => { if (i >= todayDay) return null; running += v; return running; });
+
+  const canvas = document.getElementById('detail-chart');
+  if (detailChartInstance) { detailChartInstance.destroy(); detailChartInstance = null; }
+  detailChartInstance = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: Array.from({ length: daysInMonth }, (_, i) => i + 1),
+      datasets: [
+        { label: 'Spending', data: cumulativeData, borderColor: '#9d4edd', backgroundColor: 'rgba(157,78,221,0.12)', fill: true, tension: 0.3, pointRadius: 2, pointHoverRadius: 4, borderWidth: 2, spanGaps: false },
+        { label: 'Budget limit', data: new Array(daysInMonth).fill(limit), borderColor: '#f72585', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt(ctx.raw ?? 0) } } },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6666aa', font: { size: 11 }, maxTicksLimit: 8 } },
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6666aa', font: { size: 11 }, callback: v => fmt(v) } },
+      },
+    },
+  });
+
+  document.getElementById('budget-overview').style.display = 'none';
+  document.getElementById('budget-detail').style.display   = 'block';
 }
 
-function renderAccounts() {
-  const curAccounts = accounts.filter(a => a.currency === activeCurrency);
-  const totalsEl = document.getElementById('account-totals');
-  if (curAccounts.length) {
-    const total = curAccounts.reduce((s, a) => s + Number(a.balance), 0);
-    const totalEl = document.getElementById('am-total');
-    totalEl.textContent = (total < 0 ? '-' : '') + fmt(Math.abs(total));
-    totalEl.style.color = total < 0 ? '#f72585' : '#06d6a0';
-    document.getElementById('am-count').textContent = curAccounts.length;
-    totalsEl.style.display = 'grid';
-  } else {
-    totalsEl.style.display = 'none';
-  }
-  const el = document.getElementById('account-list');
-  if (!curAccounts.length) { el.innerHTML = '<div class="empty">No accounts yet. Add one!</div>'; return; }
-  el.innerHTML = curAccounts.map(a => {
-    const color = ACCOUNT_COLORS[a.type] || '#888780';
-    const icon  = ACCOUNT_ICONS[a.type]  || 'ti-wallet';
-    const bal   = Number(a.balance);
-    return `<div class="sub-card">
-      <div class="sub-icon" style="background:${color}22"><i class="ti ${icon}" style="color:${color};font-size:15px" aria-hidden="true"></i></div>
-      <div class="sub-info"><div class="sub-name">${a.name}</div><div class="sub-meta">${a.type}</div></div>
-      <div class="txn-amount ${bal < 0 ? 'neg' : 'pos'}">${bal < 0 ? '-' : ''}${fmt(Math.abs(bal))}</div>
-      <button class="budget-edit-btn" onclick="openAccountModal('${a.id}')" title="Edit"><i class="ti ti-pencil"></i></button>
-    </div>`;
-  }).join('');
-}
-
-function openAccountModal(id) {
-  editingAccountId = id || null;
-  const isEdit = !!id;
-  const a = isEdit ? accounts.find(x => x.id === id) : null;
-  document.getElementById('account-modal-title').textContent = isEdit ? 'Edit account' : 'Add account';
-  document.getElementById('a-name').value    = a ? a.name : '';
-  document.getElementById('a-type').value    = a ? a.type : 'Checking';
-  document.getElementById('a-balance').value = a ? a.balance : '';
-  document.getElementById('a-balance-label').textContent = 'Balance (' + getCur().symbol + ')';
-  document.getElementById('a-delete-btn').style.display = isEdit ? 'block' : 'none';
-  document.getElementById('account-modal').style.display = 'flex';
-}
-function closeAccountModal() { document.getElementById('account-modal').style.display = 'none'; }
-
-async function saveAccount() {
-  const name    = document.getElementById('a-name').value.trim();
-  const type    = document.getElementById('a-type').value;
-  const balance = parseFloat(document.getElementById('a-balance').value);
-  if (!name || isNaN(balance)) return;
-  if (editingAccountId) {
-    const { error } = await db.from('accounts').update({ name, type, balance }).eq('id', editingAccountId);
-    if (error) { alert('Save failed: ' + error.message); return; }
-    const idx = accounts.findIndex(a => a.id === editingAccountId);
-    if (idx >= 0) accounts[idx] = { ...accounts[idx], name, type, balance };
-  } else {
-    const { data, error } = await db.from('accounts')
-      .insert({ name, type, balance, currency: activeCurrency, user_id: currentUser.id })
-      .select().single();
-    if (error) { alert('Save failed: ' + error.message); return; }
-    accounts.push(data);
-  }
-  closeAccountModal();
-  renderAccounts();
-}
-
-async function deleteAccount() {
-  if (!editingAccountId) return;
-  const { error } = await db.from('accounts').delete().eq('id', editingAccountId);
-  if (error) { alert('Delete failed: ' + error.message); return; }
-  accounts = accounts.filter(a => a.id !== editingAccountId);
-  closeAccountModal();
-  renderAccounts();
+function closeBudgetDetail() {
+  if (detailChartInstance) { detailChartInstance.destroy(); detailChartInstance = null; }
+  document.getElementById('budget-detail').style.display   = 'none';
+  document.getElementById('budget-overview').style.display = 'block';
 }
 
 async function loadSubscriptions() {
@@ -568,7 +547,6 @@ function render() {
   renderChart(thisMonth);
   renderDestChart(thisMonth);
   renderSubscriptions();
-  renderAccounts();
 }
 
 function txnHTML(t, showDelete) {
@@ -634,10 +612,10 @@ function renderBudgets(thisMonth) {
       : pct >= 80
         ? '<span class="badge badge-warn">Near limit</span>'
         : '<span class="badge badge-ok">On track</span>';
-    return `<div class="budget-card">
+    return `<div class="budget-card" onclick="openBudgetDetail('${cat}')" style="cursor:pointer">
       <div class="budget-meta">
         <span class="budget-name">
-          <button class="budget-edit-btn" onclick="openBudgetModal('${cat}')" title="Edit"><i class="ti ti-pencil"></i></button>
+          <button class="budget-edit-btn" onclick="event.stopPropagation();openBudgetModal('${cat}')" title="Edit"><i class="ti ti-pencil"></i></button>
           ${cat}
         </span>
         <span style="display:flex;align-items:center;gap:8px">

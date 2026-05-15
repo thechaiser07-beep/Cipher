@@ -64,7 +64,6 @@
         <div class="nav-item" data-page="transactions"><i class="ti ti-list" aria-hidden="true"></i> Transactions</div>
         <div class="nav-item" data-page="budgets"><i class="ti ti-target" aria-hidden="true"></i> Budgets</div>
         <div class="nav-item" data-page="subscriptions"><i class="ti ti-repeat" aria-hidden="true"></i> Subscriptions</div>
-        <div class="nav-item" data-page="accounts"><i class="ti ti-wallet" aria-hidden="true"></i> Accounts</div>
         <div class="sidebar-bottom">
           <div class="currency-label">Currency</div>
           <select class="cur-select" id="cur-select" onchange="setCurrency(this.value)"></select>
@@ -111,36 +110,46 @@
 
         <!-- Budgets -->
         <div class="page" id="page-budgets">
-          <div class="page-title">Monthly budgets</div>
-          <button class="add-btn" onclick="openBudgetModal()"><i class="ti ti-plus" aria-hidden="true"></i> Add budget</button>
-          <div class="metrics" id="budget-totals" style="display:none">
-            <div class="metric"><div class="metric-label">Total budget</div><div class="metric-value" id="bm-limit">0</div></div>
-            <div class="metric"><div class="metric-label">Spent</div><div class="metric-value expense" id="bm-spent">0</div></div>
-            <div class="metric"><div class="metric-label" id="bm-remaining-label">Remaining</div><div class="metric-value" id="bm-remaining">0</div></div>
-          </div>
-          <div class="card" id="budget-chart-card" style="display:none">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-              <div class="section-title" style="margin:0">Spending trend</div>
-              <select id="budget-cat-select" class="cur-select-sm" onchange="renderBudgetChart()"></select>
+          <!-- Overview -->
+          <div id="budget-overview">
+            <div class="page-title">Monthly budgets</div>
+            <button class="add-btn" onclick="openBudgetModal()"><i class="ti ti-plus" aria-hidden="true"></i> Add budget</button>
+            <div class="metrics" id="budget-totals" style="display:none">
+              <div class="metric"><div class="metric-label">Total budget</div><div class="metric-value" id="bm-limit">0</div></div>
+              <div class="metric"><div class="metric-label">Spent</div><div class="metric-value expense" id="bm-spent">0</div></div>
+              <div class="metric"><div class="metric-label" id="bm-remaining-label">Remaining</div><div class="metric-value" id="bm-remaining">0</div></div>
             </div>
-            <div class="chart-wrap"><canvas id="budgetChart" role="img" aria-label="Budget spending trend"></canvas></div>
-            <div style="display:flex;gap:14px;margin-top:8px;font-size:12px">
-              <span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)"><span style="width:10px;height:3px;background:#9d4edd;border-radius:2px;display:inline-block"></span>Spending</span>
-              <span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)"><span style="width:10px;height:3px;background:#f72585;border-radius:2px;display:inline-block;border-top:2px dashed #f72585;height:0"></span>Budget limit</span>
+            <div class="card" id="budget-chart-card" style="display:none">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                <div class="section-title" style="margin:0">Spending trend</div>
+                <select id="budget-cat-select" class="cur-select-sm" onchange="renderBudgetChart()"></select>
+              </div>
+              <div class="chart-wrap"><canvas id="budgetChart" role="img" aria-label="Budget spending trend"></canvas></div>
+              <div style="display:flex;gap:14px;margin-top:8px;font-size:12px">
+                <span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)"><span style="width:10px;height:3px;background:#9d4edd;border-radius:2px;display:inline-block"></span>Spending</span>
+                <span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)"><span style="width:10px;height:3px;background:#f72585;border-radius:2px;display:inline-block"></span>Budget limit</span>
+              </div>
+            </div>
+            <div id="budget-list"></div>
+          </div>
+          <!-- Detail -->
+          <div id="budget-detail" style="display:none">
+            <button class="add-btn" onclick="closeBudgetDetail()"><i class="ti ti-arrow-left" aria-hidden="true"></i> Back to budgets</button>
+            <div class="page-title" id="detail-cat-name"></div>
+            <div class="metrics">
+              <div class="metric"><div class="metric-label">Spent</div><div class="metric-value expense" id="detail-spent">0</div></div>
+              <div class="metric"><div class="metric-label" id="detail-remaining-label">Remaining</div><div class="metric-value" id="detail-remaining">0</div></div>
+              <div class="metric"><div class="metric-label">Daily allowance</div><div class="metric-value" id="detail-daily">0</div></div>
+            </div>
+            <div class="card">
+              <div class="section-title">Spending trend</div>
+              <div class="chart-wrap"><canvas id="detail-chart" role="img" aria-label="Category spending trend"></canvas></div>
+              <div style="display:flex;gap:14px;margin-top:8px;font-size:12px">
+                <span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)"><span style="width:10px;height:3px;background:#9d4edd;border-radius:2px;display:inline-block"></span>Spending</span>
+                <span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)"><span style="width:10px;height:3px;background:#f72585;border-radius:2px;display:inline-block"></span>Budget limit</span>
+              </div>
             </div>
           </div>
-          <div id="budget-list"></div>
-        </div>
-
-        <!-- Accounts -->
-        <div class="page" id="page-accounts">
-          <div class="page-title">Accounts</div>
-          <button class="add-btn" onclick="openAccountModal()"><i class="ti ti-plus" aria-hidden="true"></i> Add account</button>
-          <div class="metrics" id="account-totals" style="display:none">
-            <div class="metric"><div class="metric-label">Total balance</div><div class="metric-value" id="am-total">0</div></div>
-            <div class="metric"><div class="metric-label">Accounts</div><div class="metric-value" id="am-count">0</div></div>
-          </div>
-          <div class="card"><div id="account-list"><div class="empty">No accounts yet. Add one!</div></div></div>
         </div>
 
         <!-- Subscriptions -->
@@ -155,36 +164,6 @@
           <div class="card"><div id="sub-list"><div class="empty">No subscriptions yet.</div></div></div>
         </div>
 
-      </div>
-    </div>
-
-    <!-- Account modal -->
-    <div class="modal-overlay" id="account-modal" style="display:none">
-      <div class="modal">
-        <div class="modal-title" id="account-modal-title">Add account</div>
-        <div class="form-group">
-          <label class="form-label">Name</label>
-          <input id="a-name" placeholder="e.g. HSBC Current">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Type</label>
-          <select id="a-type">
-            <option value="Checking">Checking</option>
-            <option value="Savings">Savings</option>
-            <option value="Credit Card">Credit Card</option>
-            <option value="Cash">Cash</option>
-            <option value="Investment">Investment</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" id="a-balance-label">Balance</label>
-          <input id="a-balance" type="number" placeholder="0" step="any">
-        </div>
-        <div class="modal-actions">
-          <button class="btn-danger" id="a-delete-btn" onclick="deleteAccount()" style="display:none">Delete</button>
-          <button class="btn-cancel" onclick="closeAccountModal()">Cancel</button>
-          <button class="btn-save" onclick="saveAccount()">Save</button>
-        </div>
       </div>
     </div>
 
@@ -303,9 +282,6 @@
     </button>
     <button class="bottom-nav-btn" data-page="subscriptions">
       <i class="ti ti-repeat" aria-hidden="true"></i><span>Subs</span>
-    </button>
-    <button class="bottom-nav-btn" data-page="accounts">
-      <i class="ti ti-wallet" aria-hidden="true"></i><span>Accounts</span>
     </button>
   </nav>
 
