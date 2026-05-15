@@ -234,6 +234,14 @@ body {
   transition: background 0.15s;
 }
 .add-btn:hover { background: var(--accent-dim); }
+.add-btn-danger {
+  display: flex; align-items: center; gap: 6px; padding: 8px 16px;
+  border: 0.5px solid #c0392b; border-radius: var(--border-radius-md);
+  background: rgba(231,76,60,0.25); color: #e74c3c;
+  font-size: 13px; cursor: pointer; margin: 0;
+  transition: background 0.15s;
+}
+.add-btn-danger:hover { background: rgba(231,76,60,0.45); }
 .btn-cancel {
   flex: 1; padding: 8px; border: 0.5px solid var(--border-mid);
   border-radius: var(--border-radius-md); background: transparent;
