@@ -179,6 +179,7 @@ function setBudgetPeriod(p) {
 
 // ── BUDGET DETAIL ─────────────────────────────────────────────────────────
 function openBudgetDetail(cat) {
+  editingBudgetCat  = cat;
   const now         = new Date();
   const year        = now.getFullYear();
   const month       = now.getMonth();
@@ -285,6 +286,19 @@ function closeBudgetDetail() {
   if (detailChartInstance) { detailChartInstance.destroy(); detailChartInstance = null; }
   document.getElementById('budget-detail').style.display   = 'none';
   document.getElementById('budget-overview').style.display = 'block';
+}
+
+async function deleteBudgetFromDetail() {
+  if (!editingBudgetCat) return;
+  const { error } = await db.from('budgets')
+    .delete()
+    .eq('user_id', currentUser.id)
+    .eq('category', editingBudgetCat)
+    .eq('currency', activeCurrency);
+  if (error) { alert('Delete failed: ' + error.message); return; }
+  delete budgets[editingBudgetCat];
+  closeBudgetDetail();
+  render();
 }
 
 async function loadSubscriptions() {
