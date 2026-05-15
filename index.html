@@ -113,9 +113,15 @@
           <!-- Overview -->
           <div id="budget-overview">
             <div class="page-title">Monthly budgets</div>
-            <button class="add-btn" onclick="openBudgetModal()"><i class="ti ti-plus" aria-hidden="true"></i> Add budget</button>
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:1rem;flex-wrap:wrap">
+              <button class="add-btn" style="margin:0" onclick="openBudgetModal()"><i class="ti ti-plus" aria-hidden="true"></i> Add budget</button>
+              <div class="type-toggle" style="max-width:180px">
+                <button class="type-btn active-inc" id="period-monthly" onclick="setBudgetPeriod('monthly')">Monthly</button>
+                <button class="type-btn" id="period-yearly" onclick="setBudgetPeriod('yearly')">Yearly</button>
+              </div>
+            </div>
             <div class="metrics" id="budget-totals" style="display:none">
-              <div class="metric"><div class="metric-label">Total budget</div><div class="metric-value" id="bm-limit">0</div></div>
+              <div class="metric"><div class="metric-label" id="bm-limit-label">Monthly budget</div><div class="metric-value" id="bm-limit">0</div></div>
               <div class="metric"><div class="metric-label">Spent</div><div class="metric-value expense" id="bm-spent">0</div></div>
               <div class="metric"><div class="metric-label" id="bm-remaining-label">Remaining</div><div class="metric-value" id="bm-remaining">0</div></div>
             </div>

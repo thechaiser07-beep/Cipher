@@ -17,6 +17,7 @@ let editingBudgetCat = null;
 let subs = [];
 let editingSubId = null;
 let detailChartInstance = null;
+let budgetPeriod = 'monthly';
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'USD' },
@@ -32,6 +33,16 @@ const CURRENCIES = [
 ];
 
 const DEST_COLORS = ['#9d4edd','#4cc9f0','#06d6a0','#f72585','#ffbe0b','#ff6b6b','#06b6d4','#8b5cf6','#f97316','#14b8a6'];
+
+const BUDGET_ICONS = {
+  Food: 'ti-bowl-spoon', Transport: 'ti-car', Housing: 'ti-home',
+  Entertainment: 'ti-device-tv', Health: 'ti-heart-rate-monitor',
+  Shopping: 'ti-shopping-bag', Salary: 'ti-briefcase', Freelance: 'ti-device-laptop',
+  Gym: 'ti-barbell', Travel: 'ti-plane', Education: 'ti-book',
+  Bills: 'ti-receipt', Subscriptions: 'ti-repeat', Dining: 'ti-tools-kitchen-2',
+  Other: 'ti-tag',
+};
+function getBudgetIcon(cat) { return BUDGET_ICONS[cat] || 'ti-circle-dot'; }
 
 const CAT_COLORS = {
   Food: '#06d6a0', Transport: '#4cc9f0', Housing: '#9d4edd',
@@ -159,63 +170,112 @@ function ordinal(n) {
   return n + (s[(v-20)%10] || s[v] || s[0]);
 }
 
+function setBudgetPeriod(p) {
+  budgetPeriod = p;
+  document.getElementById('period-monthly').className = 'type-btn' + (p === 'monthly' ? ' active-inc' : '');
+  document.getElementById('period-yearly').className  = 'type-btn' + (p === 'yearly'  ? ' active-inc' : '');
+  render();
+}
+
 // ── BUDGET DETAIL ─────────────────────────────────────────────────────────
 function openBudgetDetail(cat) {
   const now         = new Date();
   const year        = now.getFullYear();
   const month       = now.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const todayDay    = now.getDate();
-  const daysLeft    = daysInMonth - todayDay + 1;
-
-  const monthTxns = txns.filter(t => {
-    const d = new Date(t.date + 'T00:00:00');
-    return d.getMonth() === month && d.getFullYear() === year &&
-           t.currency === activeCurrency && t.type === 'expense' && t.cat === cat;
-  });
-
-  const spent     = monthTxns.reduce((s, t) => s + t.amount, 0);
-  const limit     = budgets[cat] || 0;
-  const remaining = limit - spent;
-  const daily     = daysLeft > 0 ? remaining / daysLeft : 0;
-
-  document.getElementById('detail-cat-name').textContent = cat;
-  document.getElementById('detail-spent').textContent    = fmt(spent);
-
-  const remEl = document.getElementById('detail-remaining');
-  remEl.textContent = (remaining < 0 ? '-' : '') + fmt(Math.abs(remaining));
-  remEl.style.color = remaining < 0 ? '#f72585' : '#06d6a0';
-  document.getElementById('detail-remaining-label').textContent = remaining < 0 ? 'Over budget' : 'Remaining';
-
-  const dailyEl = document.getElementById('detail-daily');
-  dailyEl.textContent = fmt(Math.max(0, daily));
-  dailyEl.style.color = daily <= 0 ? '#f72585' : '#06d6a0';
-
-  const dailySpend = new Array(daysInMonth).fill(0);
-  monthTxns.forEach(t => { dailySpend[new Date(t.date + 'T00:00:00').getDate() - 1] += t.amount; });
-  let running = 0;
-  const cumulativeData = dailySpend.map((v, i) => { if (i >= todayDay) return null; running += v; return running; });
+  const isYearly    = budgetPeriod === 'yearly';
+  const monthlyLimit = budgets[cat] || 0;
 
   const canvas = document.getElementById('detail-chart');
   if (detailChartInstance) { detailChartInstance.destroy(); detailChartInstance = null; }
-  detailChartInstance = new Chart(canvas, {
-    type: 'line',
-    data: {
-      labels: Array.from({ length: daysInMonth }, (_, i) => i + 1),
-      datasets: [
-        { label: 'Spending', data: cumulativeData, borderColor: '#9d4edd', backgroundColor: 'rgba(157,78,221,0.12)', fill: true, tension: 0.3, pointRadius: 2, pointHoverRadius: 4, borderWidth: 2, spanGaps: false },
-        { label: 'Budget limit', data: new Array(daysInMonth).fill(limit), borderColor: '#f72585', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 },
-      ],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt(ctx.raw ?? 0) } } },
-      scales: {
-        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6666aa', font: { size: 11 }, maxTicksLimit: 8 } },
-        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6666aa', font: { size: 11 }, callback: v => fmt(v) } },
+
+  const icon = getBudgetIcon(cat);
+  const catColor = CAT_COLORS[cat] || '#888780';
+  document.getElementById('detail-cat-name').innerHTML =
+    `<span style="display:inline-flex;align-items:center;gap:8px">
+      <span style="background:${catColor}22;border-radius:6px;padding:4px 6px"><i class="ti ${icon}" style="color:${catColor};font-size:16px"></i></span>
+      ${cat}
+    </span>`;
+
+  const chartScaleOpts = {
+    x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6666aa', font: { size: 11 }, maxTicksLimit: 8 } },
+    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6666aa', font: { size: 11 }, callback: v => fmt(v) } },
+  };
+  const tooltipOpts = { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt(ctx.raw ?? 0) } };
+
+  if (isYearly) {
+    const daysLeftInYear = Math.ceil((new Date(year, 11, 31) - now) / 86400000) + 1;
+    const yearTxns = txns.filter(t => {
+      const d = new Date(t.date + 'T00:00:00');
+      return d.getFullYear() === year && t.currency === activeCurrency && t.type === 'expense' && t.cat === cat;
+    });
+    const spent     = yearTxns.reduce((s, t) => s + t.amount, 0);
+    const limit     = monthlyLimit * 12;
+    const remaining = limit - spent;
+    const daily     = daysLeftInYear > 0 ? remaining / daysLeftInYear : 0;
+
+    document.getElementById('detail-spent').textContent = fmt(spent);
+    const remEl = document.getElementById('detail-remaining');
+    remEl.textContent = (remaining < 0 ? '-' : '') + fmt(Math.abs(remaining));
+    remEl.style.color = remaining < 0 ? '#f72585' : '#06d6a0';
+    document.getElementById('detail-remaining-label').textContent = remaining < 0 ? 'Over budget' : 'Remaining';
+    const dailyEl = document.getElementById('detail-daily');
+    dailyEl.textContent = fmt(Math.max(0, daily));
+    dailyEl.style.color = daily <= 0 ? '#f72585' : '#06d6a0';
+
+    const monthlySpend = new Array(12).fill(0);
+    yearTxns.forEach(t => { monthlySpend[new Date(t.date + 'T00:00:00').getMonth()] += t.amount; });
+    const monthData = monthlySpend.map((v, i) => i <= month ? v : null);
+
+    detailChartInstance = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: MONTH_NAMES.map(m => m.slice(0, 3)),
+        datasets: [
+          { label: 'Spending', data: monthData, backgroundColor: 'rgba(157,78,221,0.7)', borderRadius: 4 },
+          { type: 'line', label: 'Monthly limit', data: new Array(12).fill(monthlyLimit), borderColor: '#f72585', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
+        ],
       },
-    },
-  });
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipOpts }, scales: chartScaleOpts },
+    });
+  } else {
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const todayDay    = now.getDate();
+    const daysLeft    = daysInMonth - todayDay + 1;
+    const monthTxns   = txns.filter(t => {
+      const d = new Date(t.date + 'T00:00:00');
+      return d.getMonth() === month && d.getFullYear() === year &&
+             t.currency === activeCurrency && t.type === 'expense' && t.cat === cat;
+    });
+    const spent     = monthTxns.reduce((s, t) => s + t.amount, 0);
+    const remaining = monthlyLimit - spent;
+    const daily     = daysLeft > 0 ? remaining / daysLeft : 0;
+
+    document.getElementById('detail-spent').textContent = fmt(spent);
+    const remEl = document.getElementById('detail-remaining');
+    remEl.textContent = (remaining < 0 ? '-' : '') + fmt(Math.abs(remaining));
+    remEl.style.color = remaining < 0 ? '#f72585' : '#06d6a0';
+    document.getElementById('detail-remaining-label').textContent = remaining < 0 ? 'Over budget' : 'Remaining';
+    const dailyEl = document.getElementById('detail-daily');
+    dailyEl.textContent = fmt(Math.max(0, daily));
+    dailyEl.style.color = daily <= 0 ? '#f72585' : '#06d6a0';
+
+    const dailySpend = new Array(daysInMonth).fill(0);
+    monthTxns.forEach(t => { dailySpend[new Date(t.date + 'T00:00:00').getDate() - 1] += t.amount; });
+    let running = 0;
+    const cumulativeData = dailySpend.map((v, i) => { if (i >= todayDay) return null; running += v; return running; });
+
+    detailChartInstance = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: Array.from({ length: daysInMonth }, (_, i) => i + 1),
+        datasets: [
+          { label: 'Spending', data: cumulativeData, borderColor: '#9d4edd', backgroundColor: 'rgba(157,78,221,0.12)', fill: true, tension: 0.3, pointRadius: 2, pointHoverRadius: 4, borderWidth: 2, spanGaps: false },
+          { label: 'Budget limit', data: new Array(daysInMonth).fill(monthlyLimit), borderColor: '#f72585', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipOpts }, scales: chartScaleOpts },
+    });
+  }
 
   document.getElementById('budget-overview').style.display = 'none';
   document.getElementById('budget-detail').style.display   = 'block';
@@ -572,11 +632,24 @@ function renderTxnList(id, list, showDelete) {
 }
 
 function renderBudgets(thisMonth) {
-  const spent = {};
-  thisMonth.filter(t => t.type === 'expense').forEach(t => { spent[t.cat] = (spent[t.cat] || 0) + t.amount; });
+  const isYearly = budgetPeriod === 'yearly';
+  const now = new Date();
+
+  const monthSpent = {};
+  thisMonth.filter(t => t.type === 'expense').forEach(t => { monthSpent[t.cat] = (monthSpent[t.cat] || 0) + t.amount; });
+
+  const yearSpent = {};
+  if (isYearly) {
+    txns.filter(t => {
+      const d = new Date(t.date + 'T00:00:00');
+      return d.getFullYear() === now.getFullYear() && t.currency === activeCurrency && t.type === 'expense';
+    }).forEach(t => { yearSpent[t.cat] = (yearSpent[t.cat] || 0) + t.amount; });
+  }
+
+  const spent   = isYearly ? yearSpent : monthSpent;
   const entries = Object.entries(budgets);
 
-  const totalLimit = entries.reduce((s, [, v]) => s + v, 0);
+  const totalLimit = entries.reduce((s, [, v]) => s + (isYearly ? v * 12 : v), 0);
   const totalSpent = entries.reduce((s, [cat]) => s + (spent[cat] || 0), 0);
   const remaining  = totalLimit - totalSpent;
   const hasBudgets = entries.length > 0;
@@ -585,6 +658,7 @@ function renderBudgets(thisMonth) {
   document.getElementById('budget-chart-card').style.display = hasBudgets ? 'block' : 'none';
 
   if (hasBudgets) {
+    document.getElementById('bm-limit-label').textContent = isYearly ? 'Yearly budget' : 'Monthly budget';
     document.getElementById('bm-limit').textContent = fmt(totalLimit);
     document.getElementById('bm-spent').textContent = fmt(totalSpent);
     const remEl = document.getElementById('bm-remaining');
@@ -603,18 +677,22 @@ function renderBudgets(thisMonth) {
     document.getElementById('budget-list').innerHTML = '<div class="empty">No budgets yet. Add one!</div>';
     return;
   }
-  document.getElementById('budget-list').innerHTML = entries.map(([cat, limit]) => {
-    const s   = spent[cat] || 0;
-    const pct = Math.min(100, Math.round(s / limit * 100));
+  document.getElementById('budget-list').innerHTML = entries.map(([cat, monthlyLimit]) => {
+    const limit = isYearly ? monthlyLimit * 12 : monthlyLimit;
+    const s     = spent[cat] || 0;
+    const pct   = Math.min(100, Math.round(s / limit * 100));
     const color = pct >= 100 ? '#f72585' : pct >= 80 ? '#ffbe0b' : '#9d4edd';
     const badge = pct >= 100
       ? '<span class="badge badge-over">Over</span>'
       : pct >= 80
         ? '<span class="badge badge-warn">Near limit</span>'
         : '<span class="badge badge-ok">On track</span>';
+    const icon  = getBudgetIcon(cat);
+    const catColor = CAT_COLORS[cat] || '#888780';
     return `<div class="budget-card" onclick="openBudgetDetail('${cat}')" style="cursor:pointer">
       <div class="budget-meta">
         <span class="budget-name">
+          <span class="budget-cat-icon" style="background:${catColor}22"><i class="ti ${icon}" style="color:${catColor}"></i></span>
           <button class="budget-edit-btn" onclick="event.stopPropagation();openBudgetModal('${cat}')" title="Edit"><i class="ti ti-pencil"></i></button>
           ${cat}
         </span>
