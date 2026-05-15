@@ -64,6 +64,7 @@
         <div class="nav-item" data-page="transactions"><i class="ti ti-list" aria-hidden="true"></i> Transactions</div>
         <div class="nav-item" data-page="budgets"><i class="ti ti-target" aria-hidden="true"></i> Budgets</div>
         <div class="nav-item" data-page="subscriptions"><i class="ti ti-repeat" aria-hidden="true"></i> Subscriptions</div>
+        <div class="nav-item" data-page="accounts"><i class="ti ti-wallet" aria-hidden="true"></i> Accounts</div>
         <div class="sidebar-bottom">
           <div class="currency-label">Currency</div>
           <select class="cur-select" id="cur-select" onchange="setCurrency(this.value)"></select>
@@ -131,6 +132,17 @@
           <div id="budget-list"></div>
         </div>
 
+        <!-- Accounts -->
+        <div class="page" id="page-accounts">
+          <div class="page-title">Accounts</div>
+          <button class="add-btn" onclick="openAccountModal()"><i class="ti ti-plus" aria-hidden="true"></i> Add account</button>
+          <div class="metrics" id="account-totals" style="display:none">
+            <div class="metric"><div class="metric-label">Total balance</div><div class="metric-value" id="am-total">0</div></div>
+            <div class="metric"><div class="metric-label">Accounts</div><div class="metric-value" id="am-count">0</div></div>
+          </div>
+          <div class="card"><div id="account-list"><div class="empty">No accounts yet. Add one!</div></div></div>
+        </div>
+
         <!-- Subscriptions -->
         <div class="page" id="page-subscriptions">
           <div class="page-title">Subscriptions</div>
@@ -143,6 +155,36 @@
           <div class="card"><div id="sub-list"><div class="empty">No subscriptions yet.</div></div></div>
         </div>
 
+      </div>
+    </div>
+
+    <!-- Account modal -->
+    <div class="modal-overlay" id="account-modal" style="display:none">
+      <div class="modal">
+        <div class="modal-title" id="account-modal-title">Add account</div>
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input id="a-name" placeholder="e.g. HSBC Current">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type</label>
+          <select id="a-type">
+            <option value="Checking">Checking</option>
+            <option value="Savings">Savings</option>
+            <option value="Credit Card">Credit Card</option>
+            <option value="Cash">Cash</option>
+            <option value="Investment">Investment</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" id="a-balance-label">Balance</label>
+          <input id="a-balance" type="number" placeholder="0" step="any">
+        </div>
+        <div class="modal-actions">
+          <button class="btn-danger" id="a-delete-btn" onclick="deleteAccount()" style="display:none">Delete</button>
+          <button class="btn-cancel" onclick="closeAccountModal()">Cancel</button>
+          <button class="btn-save" onclick="saveAccount()">Save</button>
+        </div>
       </div>
     </div>
 
@@ -261,6 +303,9 @@
     </button>
     <button class="bottom-nav-btn" data-page="subscriptions">
       <i class="ti ti-repeat" aria-hidden="true"></i><span>Subs</span>
+    </button>
+    <button class="bottom-nav-btn" data-page="accounts">
+      <i class="ti ti-wallet" aria-hidden="true"></i><span>Accounts</span>
     </button>
   </nav>
 
