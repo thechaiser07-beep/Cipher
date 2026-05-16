@@ -17,6 +17,7 @@ let editingBudgetCat = null;
 let subs = [];
 let editingSubId = null;
 let detailChartInstance = null;
+let goalChartInstance = null;
 let budgetPeriod = 'monthly';
 let goals = [];
 let editingGoalId = null;
@@ -591,8 +592,11 @@ async function saveBudget() {
             { onConflict: 'user_id,category,currency' });
   if (error) { alert('Save failed: ' + error.message); return; }
   budgets[cat] = limit;
+  const inDetail = document.getElementById('budget-detail').style.display !== 'none';
+  const detailCat = cat;
   closeBudgetModal();
   render();
+  if (inDetail) openBudgetDetail(detailCat);
 }
 
 async function deleteBudget() {
@@ -881,6 +885,107 @@ function renderBudgetChart() {
   });
 }
 
+// ── GOAL DETAIL ────────────────────────────────────────────────────────────
+async function openGoalDetail(id) {
+  const g = goals.find(x => x.id === id);
+  if (!g) return;
+  editingGoalId = id;
+
+  const now       = new Date();
+  const saved     = Number(g.saved_amount);
+  const target    = Number(g.target_amount);
+  const remaining = target - saved;
+
+  document.getElementById('goal-detail-name').textContent = g.name;
+  document.getElementById('gd-saved').textContent = fmt(saved);
+
+  const remEl = document.getElementById('gd-remaining');
+  remEl.textContent = remaining <= 0 ? fmt(0) : fmt(remaining);
+  remEl.style.color = remaining <= 0 ? '#06d6a0' : 'var(--text-bright)';
+  document.getElementById('gd-remaining-label').textContent = remaining <= 0 ? 'Goal reached!' : 'Remaining';
+
+  const dailyEl      = document.getElementById('gd-daily');
+  const dailyLabelEl = document.getElementById('gd-daily-label');
+  if (g.deadline && remaining > 0) {
+    const daysLeft = Math.ceil((new Date(g.deadline + 'T00:00:00') - now) / 86400000);
+    if (daysLeft > 0) {
+      dailyEl.textContent       = fmt(remaining / daysLeft);
+      dailyEl.style.color       = 'var(--text-bright)';
+      dailyLabelEl.textContent  = 'Daily needed';
+    } else {
+      dailyEl.textContent       = 'Overdue';
+      dailyEl.style.color       = '#f72585';
+      dailyLabelEl.textContent  = 'Deadline';
+    }
+  } else {
+    dailyEl.textContent      = '—';
+    dailyEl.style.color      = 'var(--text-dim)';
+    dailyLabelEl.textContent = remaining <= 0 ? 'Daily needed' : 'No deadline';
+  }
+
+  if (goalChartInstance) { goalChartInstance.destroy(); goalChartInstance = null; }
+  const canvas = document.getElementById('goal-detail-chart');
+
+  const { data: contribs } = await db.from('goal_contributions')
+    .select('*').eq('goal_id', id).order('date');
+
+  const chartScaleOpts = {
+    x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6666aa', font: { size: 11 }, maxTicksLimit: 8 } },
+    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#6666aa', font: { size: 11 }, callback: v => fmt(v) } },
+  };
+  const tooltipOpts = { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt(ctx.raw ?? 0) } };
+
+  if (!contribs || contribs.length === 0) {
+    goalChartInstance = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: ['Progress'],
+        datasets: [
+          { label: 'Saved',  data: [saved],  backgroundColor: 'rgba(157,78,221,0.7)', borderRadius: 4 },
+          { label: 'Target', data: [target], backgroundColor: 'rgba(247,37,133,0.2)', borderRadius: 4 },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipOpts }, scales: chartScaleOpts },
+    });
+  } else {
+    const dateMap = {};
+    contribs.forEach(c => { dateMap[c.date] = (dateMap[c.date] || 0) + Number(c.amount); });
+    const sortedDates = Object.keys(dateMap).sort();
+    let running = 0;
+    const cumData = sortedDates.map(d => { running += dateMap[d]; return running; });
+
+    goalChartInstance = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: sortedDates.map(d => d.slice(5).replace('-', '/')),
+        datasets: [
+          { label: 'Saved',  data: cumData, borderColor: '#9d4edd', backgroundColor: 'rgba(157,78,221,0.12)', fill: true, tension: 0.3, pointRadius: 3, pointHoverRadius: 5, borderWidth: 2 },
+          { label: 'Target', data: new Array(sortedDates.length).fill(target), borderColor: '#f72585', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0 },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipOpts }, scales: chartScaleOpts },
+    });
+  }
+
+  document.getElementById('goal-overview').style.display = 'none';
+  document.getElementById('goal-detail').style.display   = 'block';
+}
+
+function closeGoalDetail() {
+  if (goalChartInstance) { goalChartInstance.destroy(); goalChartInstance = null; }
+  document.getElementById('goal-detail').style.display   = 'none';
+  document.getElementById('goal-overview').style.display = 'block';
+}
+
+async function deleteGoalFromDetail() {
+  if (!editingGoalId) return;
+  const { error } = await db.from('goals').delete().eq('id', editingGoalId);
+  if (error) { alert('Delete failed: ' + error.message); return; }
+  goals = goals.filter(g => g.id !== editingGoalId);
+  closeGoalDetail();
+  renderGoals();
+}
+
 // ── WALLETS ────────────────────────────────────────────────────────────────
 function renderWallets() {
   const byCode = {};
@@ -955,12 +1060,12 @@ function renderGoals() {
     }
 
     const remaining = Math.max(0, target - saved);
-    return `<div class="goal-card">
+    return `<div class="goal-card" onclick="openGoalDetail('${g.id}')" style="cursor:pointer">
       <div class="goal-header">
         <div class="goal-name">${g.name}</div>
         <div style="display:flex;align-items:center;gap:8px">
           ${badge}
-          <button class="budget-edit-btn" onclick="openGoalModal('${g.id}')" title="Edit"><i class="ti ti-pencil"></i></button>
+          <button class="budget-edit-btn" onclick="event.stopPropagation();openGoalModal('${g.id}')" title="Edit"><i class="ti ti-pencil"></i></button>
         </div>
       </div>
       <div style="display:flex;align-items:baseline;gap:4px;margin:4px 0 8px">
@@ -1012,7 +1117,9 @@ async function saveGoal() {
     goals.push(data);
   }
   closeGoalModal();
+  const inDetail = document.getElementById('goal-detail').style.display !== 'none';
   renderGoals();
+  if (inDetail && editingGoalId) openGoalDetail(editingGoalId);
 }
 
 async function deleteGoal() {
@@ -1074,11 +1181,19 @@ async function contributeToGoal() {
   const g = goals.find(x => x.id === contributingGoalId);
   if (!g) return;
   const newSaved = Number(g.saved_amount) + amount;
-  const { error } = await db.from('goals').update({ saved_amount: newSaved }).eq('id', contributingGoalId);
-  if (error) { alert('Save failed: ' + error.message); return; }
+
+  const [updateRes] = await Promise.all([
+    db.from('goals').update({ saved_amount: newSaved }).eq('id', contributingGoalId),
+    db.from('goal_contributions').insert({ goal_id: contributingGoalId, user_id: currentUser.id, amount, date: today() }),
+  ]);
+  if (updateRes.error) { alert('Save failed: ' + updateRes.error.message); return; }
   g.saved_amount = newSaved;
   closeContributeModal();
-  renderGoals();
+  if (document.getElementById('goal-detail').style.display !== 'none') {
+    openGoalDetail(contributingGoalId);
+  } else {
+    renderGoals();
+  }
 }
 
 // ── BOOT ───────────────────────────────────────────────────────────────────

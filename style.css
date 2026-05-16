@@ -242,6 +242,14 @@ body {
   transition: background 0.15s;
 }
 .add-btn-danger:hover { background: rgba(231,76,60,0.45); }
+.add-btn-success {
+  display: flex; align-items: center; gap: 6px; padding: 8px 16px;
+  border: 0.5px solid #27ae60; border-radius: var(--border-radius-md);
+  background: rgba(39,174,96,0.22); color: #2ecc71;
+  font-size: 13px; cursor: pointer; margin: 0;
+  transition: background 0.15s;
+}
+.add-btn-success:hover { background: rgba(39,174,96,0.42); }
 .btn-cancel {
   flex: 1; padding: 8px; border: 0.5px solid var(--border-mid);
   border-radius: var(--border-radius-md); background: transparent;

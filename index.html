@@ -147,7 +147,10 @@
           <div id="budget-detail" style="display:none">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
               <button class="add-btn" style="margin:0" onclick="closeBudgetDetail()"><i class="ti ti-arrow-left" aria-hidden="true"></i> Back</button>
-              <button class="add-btn-danger" onclick="deleteBudgetFromDetail()"><i class="ti ti-trash" aria-hidden="true"></i> Delete</button>
+              <div style="display:flex;gap:8px">
+                <button class="add-btn-success" onclick="openBudgetModal(editingBudgetCat)"><i class="ti ti-pencil" aria-hidden="true"></i> Edit</button>
+                <button class="add-btn-danger" onclick="deleteBudgetFromDetail()"><i class="ti ti-trash" aria-hidden="true"></i> Delete</button>
+              </div>
             </div>
             <div class="page-title" id="detail-cat-name"></div>
             <div class="metrics">
@@ -168,14 +171,42 @@
 
         <!-- Goals -->
         <div class="page" id="page-goals">
-          <div class="page-title">Goals</div>
-          <button class="add-btn" onclick="openGoalModal()"><i class="ti ti-plus" aria-hidden="true"></i> Add goal</button>
-          <div class="metrics" id="goals-metrics" style="display:none">
-            <div class="metric"><div class="metric-label">Saved</div><div class="metric-value income" id="gm-saved">0</div></div>
-            <div class="metric"><div class="metric-label">Target</div><div class="metric-value" id="gm-target">0</div></div>
-            <div class="metric"><div class="metric-label">Goals</div><div class="metric-value" id="gm-count">0</div></div>
+          <!-- Overview -->
+          <div id="goal-overview">
+            <div class="page-title">Goals</div>
+            <button class="add-btn" onclick="openGoalModal()"><i class="ti ti-plus" aria-hidden="true"></i> Add goal</button>
+            <div class="metrics" id="goals-metrics" style="display:none">
+              <div class="metric"><div class="metric-label">Saved</div><div class="metric-value income" id="gm-saved">0</div></div>
+              <div class="metric"><div class="metric-label">Target</div><div class="metric-value" id="gm-target">0</div></div>
+              <div class="metric"><div class="metric-label">Goals</div><div class="metric-value" id="gm-count">0</div></div>
+            </div>
+            <div id="goal-list"><div class="empty">No goals yet. Add one!</div></div>
           </div>
-          <div id="goal-list"><div class="empty">No goals yet. Add one!</div></div>
+          <!-- Detail -->
+          <div id="goal-detail" style="display:none">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+              <button class="add-btn" style="margin:0" onclick="closeGoalDetail()"><i class="ti ti-arrow-left" aria-hidden="true"></i> Back</button>
+              <div style="display:flex;gap:8px">
+                <button class="add-btn-success" onclick="openGoalModal(editingGoalId)"><i class="ti ti-pencil" aria-hidden="true"></i> Edit</button>
+                <button class="add-btn-danger" onclick="deleteGoalFromDetail()"><i class="ti ti-trash" aria-hidden="true"></i> Delete</button>
+              </div>
+            </div>
+            <div class="page-title" id="goal-detail-name"></div>
+            <div class="metrics">
+              <div class="metric"><div class="metric-label">Saved</div><div class="metric-value income" id="gd-saved">0</div></div>
+              <div class="metric"><div class="metric-label" id="gd-remaining-label">Remaining</div><div class="metric-value" id="gd-remaining">0</div></div>
+              <div class="metric"><div class="metric-label" id="gd-daily-label">Daily needed</div><div class="metric-value" id="gd-daily">—</div></div>
+            </div>
+            <button class="add-btn" style="margin-bottom:1rem" onclick="openContributeModal(editingGoalId)"><i class="ti ti-plus" aria-hidden="true"></i> Add money</button>
+            <div class="card">
+              <div class="section-title">Savings progress</div>
+              <div class="chart-wrap"><canvas id="goal-detail-chart" role="img" aria-label="Goal savings progress"></canvas></div>
+              <div style="display:flex;gap:14px;margin-top:8px;font-size:12px">
+                <span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)"><span style="width:10px;height:3px;background:#9d4edd;border-radius:2px;display:inline-block"></span>Saved</span>
+                <span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)"><span style="width:10px;height:3px;background:#f72585;border-radius:2px;display:inline-block"></span>Target</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Subscriptions -->
