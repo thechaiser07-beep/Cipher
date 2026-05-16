@@ -24,6 +24,8 @@ let budgetPeriod = 'monthly';
 let goals = [];
 let editingGoalId = null;
 let contributingGoalId = null;
+let calendarYear  = new Date().getFullYear();
+let calendarMonth = new Date().getMonth();
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'USD' },
@@ -386,6 +388,68 @@ async function checkDueSubscriptions() {
   await loadTransactions();
 }
 
+// ── SUBSCRIPTION CALENDAR ─────────────────────────────────────────────────
+function prevCalMonth() {
+  if (calendarMonth === 0) { calendarMonth = 11; calendarYear--; } else calendarMonth--;
+  renderSubCalendar();
+}
+function nextCalMonth() {
+  if (calendarMonth === 11) { calendarMonth = 0; calendarYear++; } else calendarMonth++;
+  renderSubCalendar();
+}
+
+function renderSubCalendar() {
+  const year        = calendarYear;
+  const month       = calendarMonth;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDow    = new Date(year, month, 1).getDay(); // 0=Sun
+  const todayStr    = today();
+
+  // Map day-of-month → subscriptions due that day
+  const dayMap = {};
+  subs.forEach(s => {
+    let dayNum = null;
+    if (s.frequency === 'monthly') {
+      dayNum = s.day_of_month;
+    } else if (s.frequency === 'yearly' && (s.month_of_year - 1) === month) {
+      dayNum = s.day_of_month;
+    }
+    if (dayNum >= 1 && dayNum <= daysInMonth) {
+      if (!dayMap[dayNum]) dayMap[dayNum] = [];
+      dayMap[dayNum].push(s);
+    }
+  });
+
+  const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  let cells = DAY_NAMES.map(d => `<div class="cal-day-name">${d}</div>`).join('');
+
+  for (let i = 0; i < firstDow; i++) cells += `<div class="cal-cell cal-empty"></div>`;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday = dateStr === todayStr;
+    const isPast  = dateStr < todayStr;
+    const events  = dayMap[d] || [];
+    cells += `<div class="cal-cell${isToday ? ' cal-today' : ''}${isPast ? ' cal-past' : ''}">
+      <div class="cal-day-num">${d}</div>
+      ${events.map(s => {
+        const color = CAT_COLORS[s.category] || '#888780';
+        const label = s.name.length > 9 ? s.name.slice(0, 8) + '…' : s.name;
+        return `<div class="cal-event" style="background:${color}22;color:${color}" title="${s.name} — ${toDisplay(s.amount, s.currency)}">${label}</div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  document.getElementById('sub-calendar').innerHTML = `
+    <div class="cal-header">
+      <button class="cal-nav" onclick="prevCalMonth()"><i class="ti ti-chevron-left"></i></button>
+      <span class="cal-title">${MONTH_NAMES[month]} ${year}</span>
+      <button class="cal-nav" onclick="nextCalMonth()"><i class="ti ti-chevron-right"></i></button>
+    </div>
+    <div class="cal-grid">${cells}</div>`;
+}
+
 function renderSubscriptions() {
   const el = document.getElementById('sub-list');
   const curSubs = subs;
@@ -438,6 +502,8 @@ function renderSubscriptions() {
       <button class="budget-edit-btn" onclick="openSubModal('${s.id}')" title="Edit"><i class="ti ti-pencil"></i></button>
     </div>`;
   }).join('');
+
+  renderSubCalendar();
 }
 
 function openSubModal(id) {
