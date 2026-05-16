@@ -64,6 +64,7 @@
         <div class="nav-item" data-page="transactions"><i class="ti ti-list" aria-hidden="true"></i> Transactions</div>
         <div class="nav-item" data-page="budgets"><i class="ti ti-target" aria-hidden="true"></i> Budgets</div>
         <div class="nav-item" data-page="subscriptions"><i class="ti ti-repeat" aria-hidden="true"></i> Subscriptions</div>
+        <div class="nav-item" data-page="goals"><i class="ti ti-trophy" aria-hidden="true"></i> Goals</div>
         <div class="sidebar-bottom">
           <div class="currency-label">Currency</div>
           <select class="cur-select" id="cur-select" onchange="setCurrency(this.value)"></select>
@@ -94,6 +95,10 @@
               <div class="chart-wrap"><canvas id="destChart" role="img" aria-label="Spending by destination"></canvas></div>
               <div id="dest-chart-legend" style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:8px;font-size:12px"></div>
             </div>
+          </div>
+          <div class="card" id="wallets-card" style="display:none">
+            <div class="section-title">Currency wallets</div>
+            <div id="wallets-list"></div>
           </div>
           <div class="card">
             <div class="section-title">Recent transactions</div>
@@ -159,6 +164,18 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Goals -->
+        <div class="page" id="page-goals">
+          <div class="page-title">Goals</div>
+          <button class="add-btn" onclick="openGoalModal()"><i class="ti ti-plus" aria-hidden="true"></i> Add goal</button>
+          <div class="metrics" id="goals-metrics" style="display:none">
+            <div class="metric"><div class="metric-label">Saved</div><div class="metric-value income" id="gm-saved">0</div></div>
+            <div class="metric"><div class="metric-label">Target</div><div class="metric-value" id="gm-target">0</div></div>
+            <div class="metric"><div class="metric-label">Goals</div><div class="metric-value" id="gm-count">0</div></div>
+          </div>
+          <div id="goal-list"><div class="empty">No goals yet. Add one!</div></div>
         </div>
 
         <!-- Subscriptions -->
@@ -250,6 +267,49 @@
       </div>
     </div>
 
+    <!-- Goal modal -->
+    <div class="modal-overlay" id="goal-modal" style="display:none">
+      <div class="modal">
+        <div class="modal-title" id="goal-modal-title">Add goal</div>
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input id="g-name" placeholder="e.g. Japan trip">
+        </div>
+        <div class="form-group">
+          <label class="form-label" id="g-target-label">Target amount</label>
+          <input id="g-target" type="number" placeholder="0" min="0" step="any">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Deadline (optional)</label>
+          <input id="g-deadline" type="date">
+        </div>
+        <div class="modal-actions">
+          <button class="btn-danger" id="g-delete-btn" onclick="deleteGoal()" style="display:none">Delete</button>
+          <button class="btn-cancel" onclick="closeGoalModal()">Cancel</button>
+          <button class="btn-save" onclick="saveGoal()">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contribute modal -->
+    <div class="modal-overlay" id="contribute-modal" style="display:none">
+      <div class="modal">
+        <div class="modal-title" id="contribute-modal-title">Add to goal</div>
+        <div class="surplus-banner" id="c-surplus-banner" style="display:none">
+          <div class="surplus-text" id="c-surplus-text"></div>
+          <button class="surplus-btn" onclick="fillFromSurplus()">Use surplus</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label" id="c-amount-label">Amount</label>
+          <input id="c-amount" type="number" placeholder="0" min="0" step="any">
+        </div>
+        <div class="modal-actions">
+          <button class="btn-cancel" onclick="closeContributeModal()">Cancel</button>
+          <button class="btn-save" onclick="contributeToGoal()">Add</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Transaction modal -->
     <div class="modal-overlay" id="modal" style="display:none">
       <div class="modal">
@@ -291,6 +351,9 @@
     </button>
     <button class="bottom-nav-btn" data-page="subscriptions">
       <i class="ti ti-repeat" aria-hidden="true"></i><span>Subs</span>
+    </button>
+    <button class="bottom-nav-btn" data-page="goals">
+      <i class="ti ti-trophy" aria-hidden="true"></i><span>Goals</span>
     </button>
   </nav>
 

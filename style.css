@@ -325,6 +325,60 @@ body {
 .sub-name { font-size: 13px; font-weight: 500; color: var(--text-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sub-meta { font-size: 11px; color: var(--text-dim); }
 
+/* ── GOALS ── */
+.goal-card {
+  background: var(--bg-card);
+  border: 0.5px solid var(--border-subtle);
+  border-radius: var(--border-radius-lg);
+  padding: 0.9rem 1.1rem; margin-bottom: 0.6rem;
+}
+.goal-header {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;
+}
+.goal-name {
+  font-size: 14px; font-weight: 600; color: var(--text-bright);
+}
+.goal-contribute-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; font-size: 12px; font-weight: 500;
+  border: 0.5px solid var(--border-mid); border-radius: var(--border-radius-md);
+  background: transparent; color: var(--text-bright); cursor: pointer;
+  transition: background 0.15s;
+}
+.goal-contribute-btn:hover { background: var(--accent-dim); }
+
+/* ── SURPLUS BANNER ── */
+.surplus-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: rgba(6,214,160,0.08); border: 0.5px solid rgba(6,214,160,0.25);
+  border-radius: var(--border-radius-md); padding: 8px 12px; margin-bottom: 12px;
+}
+.surplus-text { font-size: 12px; color: var(--neon-green); }
+.surplus-btn {
+  font-size: 12px; font-weight: 500; padding: 4px 10px;
+  border: 0.5px solid rgba(6,214,160,0.4); border-radius: var(--border-radius-md);
+  background: rgba(6,214,160,0.15); color: var(--neon-green); cursor: pointer;
+  white-space: nowrap; transition: background 0.15s;
+}
+.surplus-btn:hover { background: rgba(6,214,160,0.28); }
+
+/* ── WALLETS ── */
+.wallet-row {
+  display: flex; align-items: center; padding: 8px 10px;
+  border-radius: var(--border-radius-md); cursor: pointer; margin-bottom: 2px;
+  border: 0.5px solid transparent; transition: background 0.15s;
+}
+.wallet-row:hover { background: var(--bg-elevated); }
+.wallet-row.wallet-active {
+  background: var(--accent-dim); border-color: var(--border-mid);
+}
+.wallet-code {
+  font-size: 13px; font-weight: 600; color: var(--text-bright);
+  width: 48px; flex-shrink: 0;
+}
+.wallet-bal { font-size: 13px; font-weight: 600; }
+.wallet-sub { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
+
 /* scrollbar */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }

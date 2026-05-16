@@ -18,6 +18,9 @@ let subs = [];
 let editingSubId = null;
 let detailChartInstance = null;
 let budgetPeriod = 'monthly';
+let goals = [];
+let editingGoalId = null;
+let contributingGoalId = null;
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'USD' },
@@ -59,6 +62,12 @@ async function loadBudgets() {
   if (data) data.forEach(row => { budgets[row.category] = Number(row.amount); });
 }
 
+// ── GOALS (Supabase) ───────────────────────────────────────────────────────
+async function loadGoals() {
+  const { data } = await db.from('goals').select('*').eq('user_id', currentUser.id).order('created_at');
+  goals = data || [];
+}
+
 // ── AUTH ───────────────────────────────────────────────────────────────────
 async function init() {
   const { data: { session } } = await db.auth.getSession();
@@ -73,7 +82,7 @@ async function init() {
       await checkDueSubscriptions();
       await showApp();
     } else if (event === 'SIGNED_OUT') {
-      currentUser = null; txns = []; subs = []; showAuthScreen();
+      currentUser = null; txns = []; subs = []; goals = []; showAuthScreen();
     }
   });
 }
@@ -90,6 +99,7 @@ async function showApp() {
   document.getElementById('dash-title').textContent = `Overview — ${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
   buildCurrencySelects();
   await loadBudgets();
+  await loadGoals();
   render();
 }
 
@@ -512,6 +522,7 @@ async function setCurrency(code) {
   });
   document.getElementById('amount-label').textContent = 'Amount (' + getCur().symbol + ')';
   await loadBudgets();
+  await loadGoals();
   render();
 }
 
@@ -621,6 +632,8 @@ function render() {
   renderChart(thisMonth);
   renderDestChart(thisMonth);
   renderSubscriptions();
+  renderGoals();
+  renderWallets();
 }
 
 function txnHTML(t, showDelete) {
@@ -866,6 +879,206 @@ function renderBudgetChart() {
       },
     },
   });
+}
+
+// ── WALLETS ────────────────────────────────────────────────────────────────
+function renderWallets() {
+  const byCode = {};
+  txns.forEach(t => {
+    if (!byCode[t.currency]) byCode[t.currency] = { income: 0, expense: 0 };
+    if (t.type === 'income') byCode[t.currency].income += t.amount;
+    else byCode[t.currency].expense += t.amount;
+  });
+  const keys = Object.keys(byCode);
+  const card = document.getElementById('wallets-card');
+  if (keys.length <= 1) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  function fmtFor(n, code) {
+    const c = CURRENCIES.find(x => x.code === code) || { symbol: code };
+    const abs = Math.abs(n);
+    return (code === 'JPY' || code === 'KRW')
+      ? c.symbol + Math.round(abs).toLocaleString()
+      : c.symbol + abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  document.getElementById('wallets-list').innerHTML = keys.map(code => {
+    const { income, expense } = byCode[code];
+    const bal = income - expense;
+    const isActive = code === activeCurrency;
+    return `<div class="wallet-row${isActive ? ' wallet-active' : ''}" onclick="setCurrency('${code}')">
+      <div class="wallet-code">${code}</div>
+      <div style="flex:1"></div>
+      <div style="text-align:right">
+        <div class="wallet-bal" style="color:${bal < 0 ? '#f72585' : '#06d6a0'}">${bal < 0 ? '-' : ''}${fmtFor(Math.abs(bal), code)}</div>
+        <div class="wallet-sub">${fmtFor(income, code)} in · ${fmtFor(expense, code)} out</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── GOALS RENDER ───────────────────────────────────────────────────────────
+function renderGoals() {
+  const curGoals = goals.filter(g => g.currency === activeCurrency);
+  const metricsEl = document.getElementById('goals-metrics');
+  if (curGoals.length) {
+    const totalSaved  = curGoals.reduce((s, g) => s + Number(g.saved_amount), 0);
+    const totalTarget = curGoals.reduce((s, g) => s + Number(g.target_amount), 0);
+    document.getElementById('gm-saved').textContent  = fmt(totalSaved);
+    document.getElementById('gm-target').textContent = fmt(totalTarget);
+    document.getElementById('gm-count').textContent  = curGoals.length;
+    metricsEl.style.display = 'grid';
+  } else {
+    metricsEl.style.display = 'none';
+  }
+
+  const el = document.getElementById('goal-list');
+  if (!curGoals.length) { el.innerHTML = '<div class="empty">No goals yet. Add one!</div>'; return; }
+
+  const now = new Date();
+  el.innerHTML = curGoals.map(g => {
+    const saved  = Number(g.saved_amount);
+    const target = Number(g.target_amount);
+    const pct    = target > 0 ? Math.min(100, Math.round(saved / target * 100)) : 0;
+    const color  = pct >= 100 ? '#06d6a0' : pct >= 60 ? '#9d4edd' : pct >= 30 ? '#4cc9f0' : '#ffbe0b';
+    const badge  = pct >= 100
+      ? '<span class="badge badge-ok">Complete!</span>'
+      : `<span class="badge" style="background:${color}22;color:${color}">${pct}%</span>`;
+
+    let deadlineHtml = '';
+    if (g.deadline) {
+      const dl = new Date(g.deadline + 'T00:00:00');
+      const daysLeft = Math.ceil((dl - now) / 86400000);
+      deadlineHtml = daysLeft < 0
+        ? `<span style="color:#f72585;font-size:11px;margin-left:6px">Overdue</span>`
+        : `<span style="color:var(--text-dim);font-size:11px;margin-left:6px">${daysLeft}d left</span>`;
+    }
+
+    const remaining = Math.max(0, target - saved);
+    return `<div class="goal-card">
+      <div class="goal-header">
+        <div class="goal-name">${g.name}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${badge}
+          <button class="budget-edit-btn" onclick="openGoalModal('${g.id}')" title="Edit"><i class="ti ti-pencil"></i></button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:4px;margin:4px 0 8px">
+        <span style="color:var(--neon-green);font-weight:600;font-size:15px">${fmt(saved)}</span>
+        <span style="color:var(--text-dim);font-size:13px"> / ${fmt(target)}</span>
+        ${deadlineHtml}
+      </div>
+      <div class="bar-track" style="margin-bottom:8px"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        ${remaining > 0
+          ? `<span style="font-size:11px;color:var(--text-dim)">${fmt(remaining)} to go</span>`
+          : `<span style="font-size:11px;color:var(--neon-green)">Goal reached!</span>`}
+        <button class="goal-contribute-btn" onclick="openContributeModal('${g.id}')"><i class="ti ti-plus" aria-hidden="true"></i> Add money</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── GOALS CRUD ─────────────────────────────────────────────────────────────
+function openGoalModal(id) {
+  editingGoalId = id || null;
+  const isEdit = !!id;
+  const g = isEdit ? goals.find(x => x.id === id) : null;
+  document.getElementById('goal-modal-title').textContent   = isEdit ? 'Edit goal' : 'Add goal';
+  document.getElementById('g-name').value                   = g ? g.name : '';
+  document.getElementById('g-target').value                 = g ? g.target_amount : '';
+  document.getElementById('g-target-label').textContent     = 'Target amount (' + getCur().symbol + ')';
+  document.getElementById('g-deadline').value               = g ? (g.deadline || '') : '';
+  document.getElementById('g-delete-btn').style.display     = isEdit ? 'block' : 'none';
+  document.getElementById('goal-modal').style.display       = 'flex';
+}
+function closeGoalModal() { document.getElementById('goal-modal').style.display = 'none'; }
+
+async function saveGoal() {
+  const name     = document.getElementById('g-name').value.trim();
+  const target   = parseFloat(document.getElementById('g-target').value);
+  const deadline = document.getElementById('g-deadline').value || null;
+  if (!name || isNaN(target) || target <= 0) return;
+
+  if (editingGoalId) {
+    const { error } = await db.from('goals').update({ name, target_amount: target, deadline }).eq('id', editingGoalId);
+    if (error) { alert('Save failed: ' + error.message); return; }
+    const idx = goals.findIndex(g => g.id === editingGoalId);
+    if (idx >= 0) goals[idx] = { ...goals[idx], name, target_amount: target, deadline };
+  } else {
+    const payload = { name, target_amount: target, saved_amount: 0, currency: activeCurrency, deadline, user_id: currentUser.id };
+    const { data, error } = await db.from('goals').insert(payload).select().single();
+    if (error) { alert('Save failed: ' + error.message); return; }
+    goals.push(data);
+  }
+  closeGoalModal();
+  renderGoals();
+}
+
+async function deleteGoal() {
+  if (!editingGoalId) return;
+  const { error } = await db.from('goals').delete().eq('id', editingGoalId);
+  if (error) { alert('Delete failed: ' + error.message); return; }
+  goals = goals.filter(g => g.id !== editingGoalId);
+  closeGoalModal();
+  renderGoals();
+}
+
+// ── GOAL CONTRIBUTIONS ─────────────────────────────────────────────────────
+function calculateBudgetSurplus() {
+  const now = new Date();
+  const monthTxns = txns.filter(t => {
+    const d = new Date(t.date + 'T00:00:00');
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() &&
+           t.currency === activeCurrency && t.type === 'expense';
+  });
+  const spent = {};
+  monthTxns.forEach(t => { spent[t.cat] = (spent[t.cat] || 0) + t.amount; });
+  let surplus = 0;
+  Object.entries(budgets).forEach(([cat, limit]) => {
+    const s = spent[cat] || 0;
+    if (s < limit) surplus += limit - s;
+  });
+  return Math.max(0, surplus);
+}
+
+function openContributeModal(id) {
+  contributingGoalId = id;
+  const g = goals.find(x => x.id === id);
+  document.getElementById('contribute-modal-title').textContent = 'Add to: ' + g.name;
+  document.getElementById('c-amount-label').textContent = 'Amount (' + getCur().symbol + ')';
+  document.getElementById('c-amount').value = '';
+
+  const surplus = calculateBudgetSurplus();
+  const banner  = document.getElementById('c-surplus-banner');
+  if (surplus > 0 && Object.keys(budgets).length > 0) {
+    document.getElementById('c-surplus-text').textContent = fmt(surplus) + ' unused budget this month';
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
+  document.getElementById('contribute-modal').style.display = 'flex';
+}
+function closeContributeModal() { document.getElementById('contribute-modal').style.display = 'none'; }
+
+function fillFromSurplus() {
+  const surplus = calculateBudgetSurplus();
+  const c = getCur();
+  document.getElementById('c-amount').value =
+    (c.code === 'JPY' || c.code === 'KRW') ? Math.round(surplus) : surplus.toFixed(2);
+}
+
+async function contributeToGoal() {
+  const amount = parseFloat(document.getElementById('c-amount').value);
+  if (isNaN(amount) || amount <= 0) return;
+  const g = goals.find(x => x.id === contributingGoalId);
+  if (!g) return;
+  const newSaved = Number(g.saved_amount) + amount;
+  const { error } = await db.from('goals').update({ saved_amount: newSaved }).eq('id', contributingGoalId);
+  if (error) { alert('Save failed: ' + error.message); return; }
+  g.saved_amount = newSaved;
+  closeContributeModal();
+  renderGoals();
 }
 
 // ── BOOT ───────────────────────────────────────────────────────────────────
