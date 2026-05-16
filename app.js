@@ -877,21 +877,26 @@ function renderChart(thisMonth) {
   if (catChartInstance) { catChartInstance.destroy(); catChartInstance = null; }
   const legend = document.getElementById('chart-legend');
   if (!labels.length) { canvas.parentElement.style.display = 'none'; legend.innerHTML = ''; return; }
+  const total = data.reduce((s, v) => s + v, 0);
   canvas.parentElement.style.display = 'block';
   catChartInstance = new Chart(canvas, {
     type: 'doughnut',
     data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.label + ': ' + fmt(ctx.raw) } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => {
+        const pct = total > 0 ? ' (' + Math.round(ctx.raw / total * 100) + '%)' : '';
+        return ' ' + ctx.label + ': ' + fmt(ctx.raw) + pct;
+      } } } },
     },
   });
-  legend.innerHTML = labels.map((l, i) =>
-    `<span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)">
+  legend.innerHTML = labels.map((l, i) => {
+    const pct = total > 0 ? Math.round(data[i] / total * 100) : 0;
+    return `<span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)">
       <span style="width:10px;height:10px;border-radius:2px;background:${colors[i]};flex-shrink:0"></span>
-      ${l} ${fmt(data[i])}
-    </span>`
-  ).join('');
+      ${l} <strong style="color:var(--text-bright)">${pct}%</strong> · ${fmt(data[i])}
+    </span>`;
+  }).join('');
 }
 
 function renderDestChart(thisMonth) {
@@ -917,21 +922,26 @@ function renderDestChart(thisMonth) {
     legend.innerHTML = '<div class="empty" style="padding:1.5rem 0">No destination data yet.</div>';
     return;
   }
+  const total = data.reduce((s, v) => s + v, 0);
   canvas.parentElement.style.display = 'block';
   destChartInstance = new Chart(canvas, {
     type: 'doughnut',
     data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.label + ': ' + fmt(ctx.raw) } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => {
+        const pct = total > 0 ? ' (' + Math.round(ctx.raw / total * 100) + '%)' : '';
+        return ' ' + ctx.label + ': ' + fmt(ctx.raw) + pct;
+      } } } },
     },
   });
-  legend.innerHTML = labels.map((l, i) =>
-    `<span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)">
+  legend.innerHTML = labels.map((l, i) => {
+    const pct = total > 0 ? Math.round(data[i] / total * 100) : 0;
+    return `<span style="display:flex;align-items:center;gap:4px;color:var(--color-text-secondary)">
       <span style="width:10px;height:10px;border-radius:2px;background:${colors[i]};flex-shrink:0"></span>
-      ${l} ${fmt(data[i])}
-    </span>`
-  ).join('');
+      ${l} <strong style="color:var(--text-bright)">${pct}%</strong> · ${fmt(data[i])}
+    </span>`;
+  }).join('');
 }
 
 function renderBudgetChart() {
