@@ -258,12 +258,15 @@ function openBudgetDetail(cat) {
   };
   const tooltipOpts = { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt(ctx.raw ?? 0) } };
 
+  let detailTxns = [];
+
   if (isYearly) {
     const daysLeftInYear = Math.ceil((new Date(year, 11, 31) - now) / 86400000) + 1;
     const yearTxns = txns.filter(t => {
       const d = new Date(t.date + 'T00:00:00');
       return d.getFullYear() === year && t.type === 'expense' && t.cat === cat;
     });
+    detailTxns = yearTxns;
     const spent     = yearTxns.reduce((s, t) => s + convert(t.amount, t.currency, activeCurrency), 0);
     const limit     = monthlyLimit * 12;
     const remaining = limit - spent;
@@ -302,6 +305,7 @@ function openBudgetDetail(cat) {
       return d.getMonth() === month && d.getFullYear() === year &&
              t.type === 'expense' && t.cat === cat;
     });
+    detailTxns = monthTxns;
     const spent     = monthTxns.reduce((s, t) => s + convert(t.amount, t.currency, activeCurrency), 0);
     const remaining = monthlyLimit - spent;
     const daily     = daysLeft > 0 ? remaining / daysLeft : 0;
@@ -332,6 +336,8 @@ function openBudgetDetail(cat) {
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipOpts }, scales: chartScaleOpts },
     });
   }
+
+  renderTxnList('detail-txn-list', detailTxns, true);
 
   document.getElementById('budget-overview').style.display = 'none';
   document.getElementById('budget-detail').style.display   = 'block';
@@ -536,7 +542,13 @@ async function saveTransaction() {
 
 async function deleteTransaction(id) {
   const { error } = await db.from('transactions').delete().eq('id', id);
-  if (!error) { txns = txns.filter(t => t.id !== id); render(); }
+  if (!error) {
+    txns = txns.filter(t => t.id !== id);
+    render();
+    if (document.getElementById('budget-detail').style.display !== 'none' && editingBudgetCat) {
+      openBudgetDetail(editingBudgetCat);
+    }
+  }
 }
 
 // ── CURRENCY ───────────────────────────────────────────────────────────────
