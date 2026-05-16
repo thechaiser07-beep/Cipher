@@ -13,6 +13,8 @@ let budgetChartInstance = null;
 let activeCurrency = localStorage.getItem('ba-currency') || 'JPY';
 let authMode = 'signin';
 let budgets = {};
+let budgetCurrencies = {};
+let exchangeRates = {};
 let editingBudgetCat = null;
 let subs = [];
 let editingSubId = null;
@@ -56,14 +58,50 @@ const CAT_COLORS = {
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
+// ── EXCHANGE RATES ─────────────────────────────────────────────────────────
+async function loadExchangeRates() {
+  const cached    = localStorage.getItem('ba-rates');
+  const cacheTime = localStorage.getItem('ba-rates-time');
+  if (cached && cacheTime && Date.now() - Number(cacheTime) < 6 * 3600 * 1000) {
+    exchangeRates = JSON.parse(cached); return;
+  }
+  try {
+    const res  = await fetch('https://open.er-api.com/v6/latest/USD');
+    const json = await res.json();
+    if (json.result === 'success') {
+      exchangeRates = json.rates;
+      localStorage.setItem('ba-rates', JSON.stringify(exchangeRates));
+      localStorage.setItem('ba-rates-time', Date.now().toString());
+    }
+  } catch (_) {
+    if (cached) exchangeRates = JSON.parse(cached);
+  }
+}
+
+function convert(amount, fromCode, toCode) {
+  if (!amount || fromCode === toCode) return amount;
+  const from = exchangeRates[fromCode];
+  const to   = exchangeRates[toCode];
+  if (!from || !to) return amount;
+  return amount / from * to;
+}
+
+function toDisplay(amount, fromCode) {
+  return fmt(convert(amount, fromCode, activeCurrency));
+}
+
+function budgetLimit(cat) {
+  return convert(budgets[cat] || 0, budgetCurrencies[cat] || activeCurrency, activeCurrency);
+}
+
 // ── BUDGETS (Supabase) ─────────────────────────────────────────────────────
 async function loadBudgets() {
   const { data } = await db.from('budgets').select('*').eq('user_id', currentUser.id);
-  budgets = {};
-  // If multiple rows exist per category (legacy multi-currency data), prefer activeCurrency
+  budgets = {}; budgetCurrencies = {};
   if (data) data.forEach(row => {
     if (!budgets[row.category] || row.currency === activeCurrency) {
-      budgets[row.category] = Number(row.amount);
+      budgets[row.category]           = Number(row.amount);
+      budgetCurrencies[row.category]  = row.currency;
     }
   });
 }
@@ -104,6 +142,7 @@ async function showApp() {
   const now = new Date();
   document.getElementById('dash-title').textContent = `Overview — ${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
   buildCurrencySelects();
+  await loadExchangeRates();
   await loadBudgets();
   await loadGoals();
   render();
@@ -200,7 +239,7 @@ function openBudgetDetail(cat) {
   const year        = now.getFullYear();
   const month       = now.getMonth();
   const isYearly    = budgetPeriod === 'yearly';
-  const monthlyLimit = budgets[cat] || 0;
+  const monthlyLimit = budgetLimit(cat);
 
   const canvas = document.getElementById('detail-chart');
   if (detailChartInstance) { detailChartInstance.destroy(); detailChartInstance = null; }
@@ -225,7 +264,7 @@ function openBudgetDetail(cat) {
       const d = new Date(t.date + 'T00:00:00');
       return d.getFullYear() === year && t.type === 'expense' && t.cat === cat;
     });
-    const spent     = yearTxns.reduce((s, t) => s + t.amount, 0);
+    const spent     = yearTxns.reduce((s, t) => s + convert(t.amount, t.currency, activeCurrency), 0);
     const limit     = monthlyLimit * 12;
     const remaining = limit - spent;
     const daily     = daysLeftInYear > 0 ? remaining / daysLeftInYear : 0;
@@ -240,7 +279,7 @@ function openBudgetDetail(cat) {
     dailyEl.style.color = daily <= 0 ? '#f72585' : '#06d6a0';
 
     const monthlySpend = new Array(12).fill(0);
-    yearTxns.forEach(t => { monthlySpend[new Date(t.date + 'T00:00:00').getMonth()] += t.amount; });
+    yearTxns.forEach(t => { monthlySpend[new Date(t.date + 'T00:00:00').getMonth()] += convert(t.amount, t.currency, activeCurrency); });
     const monthData = monthlySpend.map((v, i) => i <= month ? v : null);
 
     detailChartInstance = new Chart(canvas, {
@@ -263,7 +302,7 @@ function openBudgetDetail(cat) {
       return d.getMonth() === month && d.getFullYear() === year &&
              t.type === 'expense' && t.cat === cat;
     });
-    const spent     = monthTxns.reduce((s, t) => s + t.amount, 0);
+    const spent     = monthTxns.reduce((s, t) => s + convert(t.amount, t.currency, activeCurrency), 0);
     const remaining = monthlyLimit - spent;
     const daily     = daysLeft > 0 ? remaining / daysLeft : 0;
 
@@ -277,7 +316,7 @@ function openBudgetDetail(cat) {
     dailyEl.style.color = daily <= 0 ? '#f72585' : '#06d6a0';
 
     const dailySpend = new Array(daysInMonth).fill(0);
-    monthTxns.forEach(t => { dailySpend[new Date(t.date + 'T00:00:00').getDate() - 1] += t.amount; });
+    monthTxns.forEach(t => { dailySpend[new Date(t.date + 'T00:00:00').getDate() - 1] += convert(t.amount, t.currency, activeCurrency); });
     let running = 0;
     const cumulativeData = dailySpend.map((v, i) => { if (i >= todayDay) return null; running += v; return running; });
 
@@ -349,10 +388,12 @@ function renderSubscriptions() {
   if (curSubs.length) {
     const todayStr = today();
     const monthlyCost = curSubs.reduce((sum, s) => {
-      return sum + (s.frequency === 'monthly' ? s.amount : s.amount / 12);
+      const a = convert(s.amount, s.currency, activeCurrency);
+      return sum + (s.frequency === 'monthly' ? a : a / 12);
     }, 0);
     const yearlyCost = curSubs.reduce((sum, s) => {
-      return sum + (s.frequency === 'yearly' ? s.amount : s.amount * 12);
+      const a = convert(s.amount, s.currency, activeCurrency);
+      return sum + (s.frequency === 'yearly' ? a : a * 12);
     }, 0);
     document.getElementById('sub-m-monthly').textContent = fmt(monthlyCost);
     document.getElementById('sub-m-yearly').textContent = fmt(yearlyCost);
@@ -385,7 +426,7 @@ function renderSubscriptions() {
         <div class="sub-meta">${freqText}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
-        <div class="txn-amount neg">${fmt(s.amount)}</div>
+        <div class="txn-amount neg">${toDisplay(s.amount, s.currency)}</div>
         <div class="txn-date">Next: ${nextDue}</div>
       </div>
       <button class="budget-edit-btn" onclick="openSubModal('${s.id}')" title="Edit"><i class="ti ti-pencil"></i></button>
@@ -623,8 +664,8 @@ function render() {
     const d = new Date(t.date + 'T00:00:00');
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
-  const income  = thisMonth.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const expense = thisMonth.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const income  = thisMonth.filter(t => t.type === 'income').reduce((s, t) => s + convert(t.amount, t.currency, activeCurrency), 0);
+  const expense = thisMonth.filter(t => t.type === 'expense').reduce((s, t) => s + convert(t.amount, t.currency, activeCurrency), 0);
   const bal = income - expense;
 
   document.getElementById('m-balance').textContent = (bal < 0 ? '-' : '') + fmt(bal);
@@ -651,7 +692,7 @@ function txnHTML(t, showDelete) {
   return `<div class="txn-row">
     <div class="txn-icon" style="background:${color}22"><i class="ti ${icon}" style="color:${color};font-size:14px" aria-hidden="true"></i></div>
     <div class="txn-info"><div class="txn-name">${t.desc}</div><div class="txn-cat">${t.cat}${t.destination ? ' · ' + t.destination : ''}</div></div>
-    <div class="txn-amount ${t.type === 'income' ? 'pos' : 'neg'}">${t.type === 'income' ? '+' : '-'}${fmt(t.amount)}</div>
+    <div class="txn-amount ${t.type === 'income' ? 'pos' : 'neg'}">${t.type === 'income' ? '+' : '-'}${toDisplay(t.amount, t.currency)}</div>
     <div class="txn-date">${t.date.slice(5)}</div>
     ${del}
   </div>`;
@@ -669,20 +710,22 @@ function renderBudgets(thisMonth) {
   const now = new Date();
 
   const monthSpent = {};
-  thisMonth.filter(t => t.type === 'expense').forEach(t => { monthSpent[t.cat] = (monthSpent[t.cat] || 0) + t.amount; });
+  thisMonth.filter(t => t.type === 'expense').forEach(t => {
+    monthSpent[t.cat] = (monthSpent[t.cat] || 0) + convert(t.amount, t.currency, activeCurrency);
+  });
 
   const yearSpent = {};
   if (isYearly) {
     txns.filter(t => {
       const d = new Date(t.date + 'T00:00:00');
       return d.getFullYear() === now.getFullYear() && t.type === 'expense';
-    }).forEach(t => { yearSpent[t.cat] = (yearSpent[t.cat] || 0) + t.amount; });
+    }).forEach(t => { yearSpent[t.cat] = (yearSpent[t.cat] || 0) + convert(t.amount, t.currency, activeCurrency); });
   }
 
   const spent   = isYearly ? yearSpent : monthSpent;
   const entries = Object.entries(budgets);
 
-  const totalLimit = entries.reduce((s, [, v]) => s + (isYearly ? v * 12 : v), 0);
+  const totalLimit = entries.reduce((s, [cat]) => s + (isYearly ? budgetLimit(cat) * 12 : budgetLimit(cat)), 0);
   const totalSpent = entries.reduce((s, [cat]) => s + (spent[cat] || 0), 0);
   const remaining  = totalLimit - totalSpent;
   const hasBudgets = entries.length > 0;
@@ -710,10 +753,10 @@ function renderBudgets(thisMonth) {
     document.getElementById('budget-list').innerHTML = '<div class="empty">No budgets yet. Add one!</div>';
     return;
   }
-  document.getElementById('budget-list').innerHTML = entries.map(([cat, monthlyLimit]) => {
-    const limit = isYearly ? monthlyLimit * 12 : monthlyLimit;
+  document.getElementById('budget-list').innerHTML = entries.map(([cat]) => {
+    const limit = isYearly ? budgetLimit(cat) * 12 : budgetLimit(cat);
     const s     = spent[cat] || 0;
-    const pct   = Math.min(100, Math.round(s / limit * 100));
+    const pct   = limit > 0 ? Math.min(100, Math.round(s / limit * 100)) : 0;
     const color = pct >= 100 ? '#f72585' : pct >= 80 ? '#ffbe0b' : '#9d4edd';
     const badge = pct >= 100
       ? '<span class="badge badge-over">Over</span>'
@@ -748,7 +791,7 @@ function renderChart(thisMonth) {
     });
   }
   const spent = {};
-  thisMonth.filter(t => t.type === 'expense').forEach(t => { spent[t.cat] = (spent[t.cat] || 0) + t.amount; });
+  thisMonth.filter(t => t.type === 'expense').forEach(t => { spent[t.cat] = (spent[t.cat] || 0) + convert(t.amount, t.currency, activeCurrency); });
   const labels = Object.keys(spent);
   const data   = Object.values(spent);
   const colors = labels.map(l => CAT_COLORS[l] || '#888780');
@@ -783,7 +826,7 @@ function renderDestChart(thisMonth) {
   }
   const spent = {};
   thisMonth.filter(t => t.type === 'expense' && t.destination).forEach(t => {
-    spent[t.destination] = (spent[t.destination] || 0) + t.amount;
+    spent[t.destination] = (spent[t.destination] || 0) + convert(t.amount, t.currency, activeCurrency);
   });
   const labels = Object.keys(spent);
   const data   = Object.values(spent);
@@ -829,7 +872,7 @@ function renderBudgetChart() {
   const filtered = selectedCat === 'all' ? monthTxns : monthTxns.filter(t => t.cat === selectedCat);
 
   const dailySpend = new Array(daysInMonth).fill(0);
-  filtered.forEach(t => { dailySpend[new Date(t.date + 'T00:00:00').getDate() - 1] += t.amount; });
+  filtered.forEach(t => { dailySpend[new Date(t.date + 'T00:00:00').getDate() - 1] += convert(t.amount, t.currency, activeCurrency); });
 
   let running = 0;
   const cumulativeData = dailySpend.map((v, i) => {
@@ -839,8 +882,8 @@ function renderBudgetChart() {
   });
 
   const limit = selectedCat === 'all'
-    ? Object.values(budgets).reduce((s, v) => s + v, 0)
-    : (budgets[selectedCat] || 0);
+    ? Object.keys(budgets).reduce((s, cat) => s + budgetLimit(cat), 0)
+    : budgetLimit(selectedCat);
 
   const labels     = Array.from({ length: daysInMonth }, (_, i) => i + 1);
   const budgetLine = new Array(daysInMonth).fill(limit);
@@ -893,8 +936,8 @@ async function openGoalDetail(id) {
   editingGoalId = id;
 
   const now       = new Date();
-  const saved     = Number(g.saved_amount);
-  const target    = Number(g.target_amount);
+  const saved     = convert(Number(g.saved_amount), g.currency, activeCurrency);
+  const target    = convert(Number(g.target_amount), g.currency, activeCurrency);
   const remaining = target - saved;
 
   document.getElementById('goal-detail-name').textContent = g.name;
@@ -1028,8 +1071,8 @@ function renderGoals() {
   const curGoals = goals;
   const metricsEl = document.getElementById('goals-metrics');
   if (curGoals.length) {
-    const totalSaved  = curGoals.reduce((s, g) => s + Number(g.saved_amount), 0);
-    const totalTarget = curGoals.reduce((s, g) => s + Number(g.target_amount), 0);
+    const totalSaved  = curGoals.reduce((s, g) => s + convert(Number(g.saved_amount), g.currency, activeCurrency), 0);
+    const totalTarget = curGoals.reduce((s, g) => s + convert(Number(g.target_amount), g.currency, activeCurrency), 0);
     document.getElementById('gm-saved').textContent  = fmt(totalSaved);
     document.getElementById('gm-target').textContent = fmt(totalTarget);
     document.getElementById('gm-count').textContent  = curGoals.length;
@@ -1043,8 +1086,8 @@ function renderGoals() {
 
   const now = new Date();
   el.innerHTML = curGoals.map(g => {
-    const saved  = Number(g.saved_amount);
-    const target = Number(g.target_amount);
+    const saved  = convert(Number(g.saved_amount), g.currency, activeCurrency);
+    const target = convert(Number(g.target_amount), g.currency, activeCurrency);
     const pct    = target > 0 ? Math.min(100, Math.round(saved / target * 100)) : 0;
     const color  = pct >= 100 ? '#06d6a0' : pct >= 60 ? '#9d4edd' : pct >= 30 ? '#4cc9f0' : '#ffbe0b';
     const badge  = pct >= 100
@@ -1141,9 +1184,10 @@ function calculateBudgetSurplus() {
            t.currency === activeCurrency && t.type === 'expense';
   });
   const spent = {};
-  monthTxns.forEach(t => { spent[t.cat] = (spent[t.cat] || 0) + t.amount; });
+  monthTxns.forEach(t => { spent[t.cat] = (spent[t.cat] || 0) + convert(t.amount, t.currency, activeCurrency); });
   let surplus = 0;
-  Object.entries(budgets).forEach(([cat, limit]) => {
+  Object.keys(budgets).forEach(cat => {
+    const limit = budgetLimit(cat);
     const s = spent[cat] || 0;
     if (s < limit) surplus += limit - s;
   });
@@ -1181,11 +1225,13 @@ async function contributeToGoal() {
   if (isNaN(amount) || amount <= 0) return;
   const g = goals.find(x => x.id === contributingGoalId);
   if (!g) return;
-  const newSaved = Number(g.saved_amount) + amount;
+  // Convert the entered amount (in activeCurrency) into the goal's stored currency
+  const amountInGoalCurrency = convert(amount, activeCurrency, g.currency);
+  const newSaved = Number(g.saved_amount) + amountInGoalCurrency;
 
   const [updateRes] = await Promise.all([
     db.from('goals').update({ saved_amount: newSaved }).eq('id', contributingGoalId),
-    db.from('goal_contributions').insert({ goal_id: contributingGoalId, user_id: currentUser.id, amount, date: today() }),
+    db.from('goal_contributions').insert({ goal_id: contributingGoalId, user_id: currentUser.id, amount: amountInGoalCurrency, date: today() }),
   ]);
   if (updateRes.error) { alert('Save failed: ' + updateRes.error.message); return; }
   g.saved_amount = newSaved;
