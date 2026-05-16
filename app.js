@@ -58,9 +58,14 @@ const MONTH_NAMES = ['January','February','March','April','May','June','July','A
 
 // ── BUDGETS (Supabase) ─────────────────────────────────────────────────────
 async function loadBudgets() {
-  const { data } = await db.from('budgets').select('*').eq('user_id', currentUser.id).eq('currency', activeCurrency);
+  const { data } = await db.from('budgets').select('*').eq('user_id', currentUser.id);
   budgets = {};
-  if (data) data.forEach(row => { budgets[row.category] = Number(row.amount); });
+  // If multiple rows exist per category (legacy multi-currency data), prefer activeCurrency
+  if (data) data.forEach(row => {
+    if (!budgets[row.category] || row.currency === activeCurrency) {
+      budgets[row.category] = Number(row.amount);
+    }
+  });
 }
 
 // ── GOALS (Supabase) ───────────────────────────────────────────────────────
@@ -218,7 +223,7 @@ function openBudgetDetail(cat) {
     const daysLeftInYear = Math.ceil((new Date(year, 11, 31) - now) / 86400000) + 1;
     const yearTxns = txns.filter(t => {
       const d = new Date(t.date + 'T00:00:00');
-      return d.getFullYear() === year && t.currency === activeCurrency && t.type === 'expense' && t.cat === cat;
+      return d.getFullYear() === year && t.type === 'expense' && t.cat === cat;
     });
     const spent     = yearTxns.reduce((s, t) => s + t.amount, 0);
     const limit     = monthlyLimit * 12;
@@ -256,7 +261,7 @@ function openBudgetDetail(cat) {
     const monthTxns   = txns.filter(t => {
       const d = new Date(t.date + 'T00:00:00');
       return d.getMonth() === month && d.getFullYear() === year &&
-             t.currency === activeCurrency && t.type === 'expense' && t.cat === cat;
+             t.type === 'expense' && t.cat === cat;
     });
     const spent     = monthTxns.reduce((s, t) => s + t.amount, 0);
     const remaining = monthlyLimit - spent;
@@ -304,8 +309,7 @@ async function deleteBudgetFromDetail() {
   const { error } = await db.from('budgets')
     .delete()
     .eq('user_id', currentUser.id)
-    .eq('category', editingBudgetCat)
-    .eq('currency', activeCurrency);
+    .eq('category', editingBudgetCat);
   if (error) { alert('Delete failed: ' + error.message); return; }
   delete budgets[editingBudgetCat];
   closeBudgetDetail();
@@ -339,7 +343,7 @@ async function checkDueSubscriptions() {
 
 function renderSubscriptions() {
   const el = document.getElementById('sub-list');
-  const curSubs = subs.filter(s => s.currency === activeCurrency);
+  const curSubs = subs;
 
   const metricsEl = document.getElementById('sub-metrics');
   if (curSubs.length) {
@@ -587,9 +591,10 @@ async function saveBudget() {
   const cat   = editingBudgetCat || document.getElementById('b-cat').value.trim();
   const limit = parseFloat(document.getElementById('b-amount').value);
   if (!cat || !limit) return;
+  // Delete any old rows for this category (handles legacy multi-currency rows)
+  await db.from('budgets').delete().eq('user_id', currentUser.id).eq('category', cat);
   const { error } = await db.from('budgets')
-    .upsert({ user_id: currentUser.id, category: cat, amount: limit, currency: activeCurrency },
-            { onConflict: 'user_id,category,currency' });
+    .insert({ user_id: currentUser.id, category: cat, amount: limit, currency: activeCurrency });
   if (error) { alert('Save failed: ' + error.message); return; }
   budgets[cat] = limit;
   const inDetail = document.getElementById('budget-detail').style.display !== 'none';
@@ -604,8 +609,7 @@ async function deleteBudget() {
   const { error } = await db.from('budgets')
     .delete()
     .eq('user_id', currentUser.id)
-    .eq('category', editingBudgetCat)
-    .eq('currency', activeCurrency);
+    .eq('category', editingBudgetCat);
   if (error) { alert('Delete failed: ' + error.message); return; }
   delete budgets[editingBudgetCat];
   closeBudgetModal();
@@ -617,7 +621,7 @@ function render() {
   const now = new Date();
   const thisMonth = txns.filter(t => {
     const d = new Date(t.date + 'T00:00:00');
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && t.currency === activeCurrency;
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
   const income  = thisMonth.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const expense = thisMonth.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
@@ -628,16 +632,14 @@ function render() {
   document.getElementById('m-income').textContent  = fmt(income);
   document.getElementById('m-expense').textContent = fmt(expense);
 
-  const curTxns = txns.filter(t => t.currency === activeCurrency);
-  renderTxnList('dash-txns', curTxns.slice(0, 5), false);
-  renderTxnList('all-txns', curTxns, true);
+  renderTxnList('dash-txns', txns.slice(0, 5), false);
+  renderTxnList('all-txns', txns, true);
   renderBudgets(thisMonth);
   renderBudgetChart();
   renderChart(thisMonth);
   renderDestChart(thisMonth);
   renderSubscriptions();
   renderGoals();
-  renderWallets();
 }
 
 function txnHTML(t, showDelete) {
@@ -673,7 +675,7 @@ function renderBudgets(thisMonth) {
   if (isYearly) {
     txns.filter(t => {
       const d = new Date(t.date + 'T00:00:00');
-      return d.getFullYear() === now.getFullYear() && t.currency === activeCurrency && t.type === 'expense';
+      return d.getFullYear() === now.getFullYear() && t.type === 'expense';
     }).forEach(t => { yearSpent[t.cat] = (yearSpent[t.cat] || 0) + t.amount; });
   }
 
@@ -742,7 +744,7 @@ function renderChart(thisMonth) {
     const now = new Date();
     thisMonth = txns.filter(t => {
       const d = new Date(t.date + 'T00:00:00');
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && t.currency === activeCurrency;
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
   }
   const spent = {};
@@ -776,7 +778,7 @@ function renderDestChart(thisMonth) {
     const now = new Date();
     thisMonth = txns.filter(t => {
       const d = new Date(t.date + 'T00:00:00');
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && t.currency === activeCurrency;
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
   }
   const spent = {};
@@ -822,8 +824,7 @@ function renderBudgetChart() {
 
   const monthTxns = txns.filter(t => {
     const d = new Date(t.date + 'T00:00:00');
-    return d.getMonth() === month && d.getFullYear() === year &&
-           t.currency === activeCurrency && t.type === 'expense';
+    return d.getMonth() === month && d.getFullYear() === year && t.type === 'expense';
   });
   const filtered = selectedCat === 'all' ? monthTxns : monthTxns.filter(t => t.cat === selectedCat);
 
@@ -1024,7 +1025,7 @@ function renderWallets() {
 
 // ── GOALS RENDER ───────────────────────────────────────────────────────────
 function renderGoals() {
-  const curGoals = goals.filter(g => g.currency === activeCurrency);
+  const curGoals = goals;
   const metricsEl = document.getElementById('goals-metrics');
   if (curGoals.length) {
     const totalSaved  = curGoals.reduce((s, g) => s + Number(g.saved_amount), 0);
